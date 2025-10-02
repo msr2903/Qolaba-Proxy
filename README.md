@@ -1,4 +1,6 @@
-# Qoloba OpenAI-Compatible Proxy
+# Qolaba OpenAI-Compatible Proxy
+
+# Qolaba OpenAI-Compatible Proxy
 
 A powerful Node.js proxy server that provides OpenAI-compatible API endpoints while routing requests to the Qolaba API. This enables seamless integration with AI tools like Kilo Code, Roo Code, Cline, and any other OpenAI-compatible applications.
 
@@ -49,15 +51,15 @@ npm start
 docker-compose up -d --build
 
 # Or with plain Docker
-docker build -t qoloba-proxy .
-docker run -p 3000:3000 --env-file .env qoloba-proxy
+docker build -t qolaba-proxy .
+docker run -p 3000:3000 --env-file .env qolaba-proxy
 ```
 
 ### Option 3: NPX (Global Installation)
 
 ```bash
 # Run directly with NPX (coming soon)
-npx qoloba-proxy
+npx qolaba-proxy
 ```
 
 ## ⚙️ Configuration
@@ -73,7 +75,7 @@ HOST=0.0.0.0
 NODE_ENV=development
 
 # Qolaba API Configuration
-QOLABA_BASE_URL=https://api.qolaba.ai/v1
+QOLABA_BASE_URL=https://qolaba-server-b2b.up.railway.app/api/v1/studio
 TEST_API_KEY=your-test-api-key-here
 
 # Model Configuration
@@ -229,16 +231,16 @@ curl -X POST http://localhost:3000/v1/chat/completions \
 
 ```bash
 # Build the image
-docker build -t qoloba-proxy .
+docker build -t qolaba-proxy .
 
 # Run with environment file
-docker run -p 3000:3000 --env-file .env qoloba-proxy
+docker run -p 3000:3000 --env-file .env qolaba-proxy
 
 # Run with environment variables
 docker run -p 3000:3000 \
   -e QOLABA_BASE_URL=https://api.qolaba.ai/v1 \
   -e API_KEY_MODE=passthrough \
-  qoloba-proxy
+  qolaba-proxy
 
 # View logs
 docker logs -f <container-id>
@@ -249,12 +251,12 @@ docker logs -f <container-id>
 ```yaml
 version: '3.8'
 services:
-  qoloba-proxy:
+  qolaba-proxy:
     build: .
     ports:
       - "3000:3000"
     environment:
-      - QOLABA_BASE_URL=https://api.qolaba.ai/v1
+      - QOLABA_BASE_URL=https://qolaba-server-b2b.up.railway.app/api/v1/studio
       - API_KEY_MODE=passthrough
       - LOG_LEVEL=info
     restart: unless-stopped
@@ -319,10 +321,10 @@ LOG_LEVEL=debug ENABLE_VERBOSE_LOGGING=true npm start
 
 ```bash
 # View container logs
-docker-compose logs -f qoloba-proxy
+docker-compose logs -f qolaba-proxy
 
 # Enter container for debugging
-docker-compose exec qoloba-proxy /bin/bash
+docker-compose exec qolaba-proxy /bin/bash
 ```
 
 ## 📚 API Reference
@@ -370,7 +372,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 If you encounter issues or have questions:
 
 1. Check the [troubleshooting section](#-troubleshooting)
-2. Search existing [GitHub Issues](https://github.com/your-org/qoloba-proxy/issues)
+2. Search existing [GitHub Issues](https://github.com/your-org/qolaba-proxy/issues)
 3. Create a new issue with detailed information
 4. Include logs and configuration details (with sensitive data redacted)
 

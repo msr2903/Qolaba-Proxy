@@ -11,7 +11,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOST=0.0.0.0
-      - QOLABA_BASE_URL=https://api.qolaba.ai/v1
+      - QOLABA_BASE_URL=https://qolaba-server-b2b.up.railway.app/api/v1/studio
       - API_KEY_MODE=passthrough
       - LOG_LEVEL=info
       - ENABLE_VERBOSE_LOGGING=false
@@ -43,7 +43,7 @@ services:
       - NODE_ENV=development
       - PORT=3000
       - HOST=0.0.0.0
-      - QOLABA_BASE_URL=https://api.qolaba.ai/v1
+      - QOLABA_BASE_URL=https://qolaba-server-b2b.up.railway.app/api/v1/studio
       - API_KEY_MODE=passthrough
       - LOG_LEVEL=debug
       - ENABLE_VERBOSE_LOGGING=true

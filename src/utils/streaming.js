@@ -1,4 +1,3 @@
-
 import { logger } from '../services/logger.js'
 import { translateQolabaToOpenAI, extractToolCalls } from './translator.js'
 import { config } from '../config/index.js'
@@ -64,15 +63,13 @@ export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, 
         {
           index: 0,
           delta: {},
-          finish_reason
-: 'stop'
+          finish_reason: 'stop'
         }
       ]
     }
 
-    res.write(`data: ${JSON.stringify(final
-Chunk)}\n\n    res
-.write('data: [DONE]\\n\\n')
+    res.write(`data: ${JSON.stringify(finalChunk)}\n\n`)
+    res.write('data: [DONE]\n\n')
     res.end()
 
     logger.info('Streaming completed successfully', {

@@ -100,7 +100,7 @@ export class QolabaApiClient {
               // Check if stream is complete
               if (data.output === null) {
                 const responseTime = Date.now() - startTime
-                logQolabaRequest('/stream_chat', 'POST', payload, responseTime, 200)
+                logQolabaRequest('/streamChat', 'POST', payload, responseTime, 200)
                 
                 resolve({
                   output: totalOutput,
@@ -119,18 +119,18 @@ export class QolabaApiClient {
 
         response.data.on('error', (error) => {
           const responseTime = Date.now() - startTime
-          logQolabaRequest('/stream_chat', 'POST', payload, responseTime, 'ERROR')
+          logQolabaRequest('/streamChat', 'POST', payload, responseTime, 'ERROR')
           reject(error)
         })
 
         response.data.on('end', () => {
           const responseTime = Date.now() - startTime
-          logQolabaRequest('/stream_chat', 'POST', payload, responseTime, 200)
+          logQolabaRequest('/streamChat', 'POST', payload, responseTime, 200)
         })
       })
     } catch (error) {
       const responseTime = Date.now() - startTime
-      logQolabaRequest('/stream_chat', 'POST', payload, responseTime, error.response?.status || 'ERROR')
+      logQolabaRequest('/streamChat', 'POST', payload, responseTime, error.response?.status || 'ERROR')
       throw error
     }
   }
