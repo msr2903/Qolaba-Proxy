@@ -191,37 +191,46 @@
      * CRITICAL FIX: Coordinated termination to prevent race conditions
      */
     async coordinatedTermination(reason = 'unknown') {
-      // If termination is already in progress, wait for it to complete
+      // Use a more robust locking mechanism to prevent race conditions
       if (this.isTerminationInProgress) {
         logger.debug('Termination already in progress, waiting', {
           requestId: this.requestId,
           currentReason: this.terminationReason,
           newReason: reason
         })
+        // Wait for the current termination to complete
         await this.terminationLock
         return
       }
 
-      // Mark termination as in progress
+      // Mark termination as in progress and create a new lock
       this.isTerminationInProgress = true
       this.terminationReason = reason
-      
+
       logger.debug('Starting coordinated termination', {
         requestId: this.requestId,
         reason
       })
 
-      // Create a new termination lock
-      this.terminationLock = this._performTermination(reason)
-      
+      // Create a new termination promise that resolves when termination is complete
+      let resolveTermination
+      this.terminationLock = new Promise(resolve => {
+        resolveTermination = resolve
+      })
+
       try {
-        await this.terminationLock
+        await this._performTermination(reason)
+        // Signal that termination is complete
+        resolveTermination()
       } catch (error) {
         logger.warn('Error during coordinated termination', {
           requestId: this.requestId,
           reason,
           error: error.message
         })
+        // Still resolve the lock even on error to prevent hanging
+        resolveTermination()
+        throw error
       } finally {
         this.isTerminationInProgress = false
       }
@@ -347,50 +356,58 @@
         error: error.message,
         stack: error.stack
       })
-  
-    // CRITICAL FIX: Use coordinated termination to prevent race conditions
-    try {
-      await responseState.coordinatedTermination('error_boundary')
-    } catch (terminationError) {
-      logger.warn('Coordinated termination failed in error boundary', {
-        requestId: responseState.requestId,
-        error: terminationError.message
-      })
-    }
-  
-    // Try to send error response only if headers haven't been sent and response hasn't ended
-    if (responseState.res.canWriteHeaders()) {
+
+      // CRITICAL FIX: Use coordinated termination to prevent race conditions
       try {
-        responseState.safeWriteHeaders(500, {
-          'Content-Type': 'application/json',
-          'Connection': 'close'
-        })
-        
-        const errorResponse = {
-          error: {
-            message: 'Internal streaming error',
-            type: 'api_error',
-            code: 'streaming_error'
-          }
-        }
-        
-        responseState.safeWrite(JSON.stringify(errorResponse))
-        responseState.safeEnd()
-      } catch (writeError) {
-        logger.error('Failed to send error response in stream', {
+        await responseState.coordinatedTermination('error_boundary')
+      } catch (terminationError) {
+        logger.warn('Coordinated termination failed in error boundary', {
           requestId: responseState.requestId,
-          error: writeError.message
+          error: terminationError.message
         })
       }
-    } else {
-      logger.debug('Skipping error response - headers already sent or response ended', {
-        requestId: responseState.requestId,
-        headersSent: responseState.res.headersSent,
-        writableEnded: responseState.res.writableEnded
-      })
-    }
-  
-      // Call custom error handler if provided
+
+      // Only attempt to send error response if response hasn't been terminated
+      if (!responseState.isEnded && !responseState.isDestroyed) {
+        // Try to send error response only if headers haven't been sent
+        if (responseState.res.canWriteHeaders()) {
+          try {
+            responseState.safeWriteHeaders(500, {
+              'Content-Type': 'application/json',
+              'Connection': 'close'
+            })
+
+            const errorResponse = {
+              error: {
+                message: 'Internal streaming error',
+                type: 'api_error',
+                code: 'streaming_error'
+              }
+            }
+
+            responseState.safeWrite(JSON.stringify(errorResponse))
+            responseState.safeEnd()
+          } catch (writeError) {
+            logger.error('Failed to send error response in stream', {
+              requestId: responseState.requestId,
+              error: writeError.message
+            })
+          }
+        } else {
+          logger.debug('Skipping error response - headers already sent', {
+            requestId: responseState.requestId,
+            headersSent: responseState.isHeadersSent
+          })
+        }
+      } else {
+        logger.debug('Skipping error response - response already terminated', {
+          requestId: responseState.requestId,
+          isEnded: responseState.isEnded,
+          isDestroyed: responseState.isDestroyed
+        })
+      }
+
+      // Call custom error handler if provided, but don't let it throw
       if (errorHandler) {
         try {
           await errorHandler(error, responseState)
@@ -399,11 +416,16 @@
             requestId: responseState.requestId,
             error: handlerError.message
           })
+          // Don't re-throw handler errors to prevent cascading failures
         }
       }
-  
-      // Force destroy as last resort
-      responseState.destroy()
+
+      // Force destroy as last resort only if not already destroyed
+      if (!responseState.isDestroyed) {
+        responseState.destroy()
+      }
+
+      // Re-throw the original error to maintain error propagation
       throw error
     }
   }
@@ -444,7 +466,7 @@
       }
   
       try {
-        return this.responseState.safeWrite('data: [DONE]\\n\\n')
+        return this.responseState.safeWrite('data: [DONE]\n\n')
       } catch (error) {
         logger.error('Failed to write SSE DONE', {
           requestId: this.responseState.requestId,

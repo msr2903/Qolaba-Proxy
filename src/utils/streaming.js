@@ -22,32 +22,36 @@ let cleanupTimeoutRef = null
 const abortController = new AbortController()
 
 // CRITICAL FIX: Replace forceResponseTermination with coordinated termination
-const handleTimeout = () => {
+const handleTimeout = async () => {
   logger.warn('Streaming timeout reached, initiating coordinated termination', { requestId })
-  responseState.coordinatedTermination('timeout').catch(error => {
+  try {
+    await responseState.coordinatedTermination('timeout')
+  } catch (error) {
     logger.warn('Coordinated timeout termination failed', {
       requestId,
       error: error.message
     })
-  })
+  }
 }
 
 // Set timeout with proper cleanup
-cleanupTimeoutRef = setTimeout(handleTimeout, 30000)
+cleanupTimeoutRef = setTimeout(() => handleTimeout(), 30000)
 
 // Enhanced disconnect detection
 let isClientDisconnected = false
   
   // CRITICAL FIX: Replace forceResponseTermination with coordinated termination handler
-  const handleTermination = (reason) => {
+  const handleTermination = async (reason) => {
     logger.debug('Initiating termination', { requestId, reason })
-    responseState.coordinatedTermination(reason).catch(error => {
+    try {
+      await responseState.coordinatedTermination(reason)
+    } catch (error) {
       logger.warn('Coordinated termination failed', {
         requestId,
         reason,
         error: error.message
       })
-    })
+    }
   }
   
   // Handle response errors
@@ -60,7 +64,12 @@ let isClientDisconnected = false
     
     if (!isClientDisconnected) {
       abortController.abort()
-      handleTermination('response_error')
+      handleTermination('response_error').catch(error => {
+        logger.warn('Response error termination failed', {
+          requestId,
+          error: error.message
+        })
+      })
     }
   }
 
@@ -78,7 +87,12 @@ let isClientDisconnected = false
     logger.info('Client disconnected during streaming', { requestId })
     isClientDisconnected = true
     abortController.abort()
-    handleTermination('client_disconnect')
+    handleTermination('client_disconnect').catch(error => {
+      logger.warn('Client disconnect termination failed', {
+        requestId,
+        error: error.message
+      })
+    })
   }
 
   // Listen for client disconnect
@@ -181,12 +195,14 @@ let isClientDisconnected = false
     })
 
     // CRITICAL FIX: Use coordinated termination to prevent race conditions
-    handleTermination('streaming_complete').catch(error => {
+    try {
+      await handleTermination('streaming_complete')
+    } catch (error) {
       logger.warn('Streaming completion termination failed', {
         requestId,
         error: error.message
       })
-    })
+    }
 
   }, responseState, async (error, responseState) => {
     // Custom error handler for streaming
