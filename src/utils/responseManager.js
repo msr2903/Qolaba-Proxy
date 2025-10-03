@@ -36,10 +36,12 @@ export class ResponseManager {
       // Mark as ended before calling original end
       self.isEnded = true
 
-      // Execute all end callbacks
+      // Execute all end callbacks AFTER marking as ended to prevent race conditions
       for (const callback of self.endCallbacks) {
         try {
-          callback(chunk, encoding)
+          // CRITICAL FIX: Don't pass chunk/encoding to callbacks to prevent header issues
+          // The response is already being ended, callbacks should not modify headers
+          callback()
         } catch (error) {
           logger.error('End callback failed', {
             requestId: self.requestId,

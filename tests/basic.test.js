@@ -100,30 +100,30 @@ describe('Qoloba Proxy API', () => {
     })
     
     it('should validate invalid model', async () => {
-n      const response = await request(app)
-n        .post('/v1/chat/completions')
-n        .send({
-n          model: 'invalid-model',
-n          messages: [{ role: 'user', content: 'Hello' }]
-n        })
-n        .expect(401) // Will fail due to missing API key
-n      
-n      // Should still validate the model exists in mappings
-n      assert.ok(response.body.error)
-n    })
+      const response = await request(app)
+        .post('/v1/chat/completions')
+        .send({
+          model: 'invalid-model',
+          messages: [{ role: 'user', content: 'Hello' }]
+        })
+        .expect(401) // Will fail due to missing API key
+      
+      // Should still validate the model exists in mappings
+      assert.ok(response.body.error)
+    })
     
     it('should require authentication', async () => {
-n      const response = await request(app)
-n        .post('/v1/chat/completions')
-n        .send({
-n          model: 'gpt-4.1-mini-2025-04-14',
-n          messages: [{ role: 'user', content: 'Hello' }]
-n        })
-n        .expect(401)
+      const response = await request(app)
+        .post('/v1/chat/completions')
+        .send({
+          model: 'gpt-4.1-mini-2025-04-14',
+          messages: [{ role: 'user', content: 'Hello' }]
+        })
+        .expect(401)
       
       assert.ok(response.body.error)
-n      assert.strictEqual(response.body.error.code, 'missing_api_key')
-n    })
+      assert.strictEqual(response.body.error.code, 'missing_api_key')
+    })
   })
   
   describe('Error Handling', () => {

@@ -43,7 +43,7 @@ export const healthMonitor = (options = {}) => {
 
     // Use ResponseManager to track response completion instead of overriding res.end
     if (req.responseManager) {
-      req.responseManager.onEnd((chunk, encoding) => {
+      req.responseManager.onEnd(() => {
         const duration = Date.now() - startTime
         
         // Update health data

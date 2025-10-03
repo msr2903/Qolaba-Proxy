@@ -25,7 +25,7 @@ export const requestLogger = (req, res, next) => {
   
   // Use ResponseManager to log response completion instead of overriding res.end
   if (req.responseManager) {
-    req.responseManager.onEnd((chunk, encoding) => {
+    req.responseManager.onEnd(() => {
       const duration = Date.now() - startTime
       const contentLength = res.get('Content-Length') || 0
       
@@ -87,7 +87,7 @@ export const requestTimer = (req, res, next) => {
   
   // Use ResponseManager to log slow requests instead of overriding res.end
   if (req.responseManager) {
-    req.responseManager.onEnd((chunk, encoding) => {
+    req.responseManager.onEnd(() => {
       const duration = Date.now() - req.startTime
       
       // Log requests that take longer than 5 seconds
@@ -171,10 +171,8 @@ export const responseSizeLogger = (req, res, next) => {
   
   // Use ResponseManager to log response size instead of overriding res.end
   if (req.responseManager) {
-    req.responseManager.onEnd((chunk, encoding) => {
-      if (chunk) {
-        responseSize += chunk.length
-      }
+    req.responseManager.onEnd(() => {
+      // Note: We can't access chunk here anymore, but we already tracked it via res.write override
       
       if (responseSize > 1024 * 1024) { // Log responses larger than 1MB
         logger.info('Large response', {

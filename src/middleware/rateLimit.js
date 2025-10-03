@@ -152,7 +152,7 @@ export const createRateLimit = (options = {}) => {
       
       // Use ResponseManager to increment counter based on response
       if (req.responseManager) {
-        req.responseManager.onEnd((chunk, encoding) => {
+        req.responseManager.onEnd(() => {
           if ((skipSuccessfulRequests && res.statusCode < 400) ||
               (skipFailedRequests && res.statusCode >= 400)) {
             // Don't count this request

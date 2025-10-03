@@ -402,9 +402,9 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
         model: qolabaPayload.model
       })
 
-      // Ensure ResponseManager is properly ended
+      // Ensure ResponseManager is properly ended through its coordination
       if (responseManager && !responseManager.hasEnded()) {
-        responseManager.getOriginalEnd().call(res)
+        res.end()
       }
 
     } catch (error) {
@@ -419,9 +419,9 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
         responseLength: fullResponse.length
       })
 
-      // Ensure ResponseManager is properly ended even on error
+      // Ensure ResponseManager is properly ended through its coordination even on error
       if (responseManager && !responseManager.hasEnded()) {
-        responseManager.getOriginalEnd().call(res)
+        res.end()
       }
     }
 
@@ -453,9 +453,9 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
         error: error.message
       })
 
-      // Ensure ResponseManager is properly ended on error
+      // Ensure ResponseManager is properly ended through its coordination on error
       if (responseManager && !responseManager.hasEnded()) {
-        responseManager.getOriginalEnd().call(res)
+        res.end()
       }
 
     } catch (terminationError) {
@@ -470,9 +470,9 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
         terminationError: terminationError.message
       })
 
-      // Ensure ResponseManager is properly ended even on termination error
+      // Ensure ResponseManager is properly ended through its coordination even on termination error
       if (responseManager && !responseManager.hasEnded()) {
-        responseManager.getOriginalEnd().call(res)
+        res.end()
       }
     }
 
