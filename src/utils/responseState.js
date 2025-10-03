@@ -20,6 +20,11 @@
       this.terminationLock = Promise.resolve()
       this.terminationReason = null
       
+      // ENHANCEMENT: Add timeout coordination for streaming requests
+      this.timeoutCallbacks = new Set()
+      this.isTimeoutCancelled = false
+      this.requestTimeoutRef = null
+      
       // Store original methods
       this.originalWrite = res.write
       this.originalEnd = res.end
@@ -127,6 +132,59 @@
       }
       this.res.markStreamingCompleted = function() {
         self.streamingCompleted = true
+      }
+      
+      // Add method to register timeout callbacks
+      this.res.registerTimeoutCallback = function(callback) {
+        if (!self.isTimeoutCancelled && !self.isEnded && !self.isDestroyed) {
+          self.timeoutCallbacks.add(callback)
+          return true
+        }
+        return false
+      }
+      
+      // Add method to cancel all registered timeouts
+      this.res.cancelAllTimeouts = function(reason = 'response_complete') {
+        if (self.isTimeoutCancelled) {
+          return false // Already cancelled
+        }
+        
+        self.isTimeoutCancelled = true
+        logger.debug('Cancelling all registered timeouts', {
+          requestId: self.requestId,
+          reason,
+          callbackCount: self.timeoutCallbacks.size
+        })
+        
+        // Execute all timeout callbacks
+        for (const callback of self.timeoutCallbacks) {
+          try {
+            callback(reason)
+          } catch (error) {
+            logger.warn('Timeout callback failed', {
+              requestId: self.requestId,
+              error: error.message
+            })
+          }
+        }
+        
+        self.timeoutCallbacks.clear()
+        return true
+      }
+      
+      // Add method to check if timeouts can be cancelled
+      this.res.canCancelTimeouts = function() {
+        return !self.isTimeoutCancelled && !self.isDestroyed
+      }
+      
+      // Add method to set request timeout reference
+      this.res.setRequestTimeoutRef = function(timeoutRef) {
+        self.requestTimeoutRef = timeoutRef
+      }
+      
+      // Add method to get request timeout reference
+      this.res.getRequestTimeoutRef = function() {
+        return self.requestTimeoutRef
       }
     }
   
@@ -328,6 +386,9 @@
     destroy() {
       this.isDestroyed = true
       this.isEnded = true
+      
+      // CRITICAL FIX: Cancel all registered timeouts when destroying
+      this.res.cancelAllTimeouts('response_destroyed')
       
       // Try to destroy the underlying socket if available
       if (this.res.socket && typeof this.res.socket.destroy === 'function') {

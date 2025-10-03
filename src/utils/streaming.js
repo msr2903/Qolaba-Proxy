@@ -99,11 +99,17 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
   // Create response state tracker
   const responseState = createResponseState(res, requestId)
 
-  // Clear the request timeout for streaming requests to prevent conflicts
+  // ENHANCEMENT: Coordinate with request timeout middleware instead of just clearing
   if (req.timeoutRef) {
-    clearTimeout(req.timeoutRef)
-    req.timeoutRef = null
-    logger.debug('Cleared request timeout for streaming', { requestId })
+    // Store the timeout reference in ResponseState for coordination
+    if (res.setRequestTimeoutRef && typeof res.setRequestTimeoutRef === 'function') {
+      res.setRequestTimeoutRef(req.timeoutRef)
+    }
+    
+    // Don't clear the timeout immediately - let ResponseState coordinate it
+    logger.debug('Request timeout registered with streaming ResponseState', { requestId })
+  } else {
+    logger.debug('No request timeout reference found for streaming', { requestId })
   }
 
   // Add abort controller for request cancellation
@@ -322,6 +328,22 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
       })
     }
 
+    // ENHANCEMENT: Cancel all registered timeouts on streaming completion
+    if (res.cancelAllTimeouts && typeof res.cancelAllTimeouts === 'function') {
+      try {
+        const cancelled = res.cancelAllTimeouts('streaming_completed')
+        logger.debug('Cancelled all registered timeouts on streaming completion', {
+          requestId,
+          cancelled
+        })
+      } catch (error) {
+        logger.warn('Failed to cancel timeouts on streaming completion', {
+          requestId,
+          error: error.message
+        })
+      }
+    }
+
   }, responseState, async (error, responseState) => {
     // Custom error handler for streaming
     logger.error('Streaming error handler called', {
@@ -337,6 +359,22 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
         requestId,
         error: terminationError.message
       })
+    }
+
+    // ENHANCEMENT: Cancel all registered timeouts on streaming error
+    if (res.cancelAllTimeouts && typeof res.cancelAllTimeouts === 'function') {
+      try {
+        const cancelled = res.cancelAllTimeouts('streaming_error')
+        logger.debug('Cancelled all registered timeouts on streaming error', {
+          requestId,
+          cancelled
+        })
+      } catch (error) {
+        logger.warn('Failed to cancel timeouts on streaming error', {
+          requestId,
+          error: error.message
+        })
+      }
     }
 
     // Try to send error response only if headers haven't been sent and response hasn't ended

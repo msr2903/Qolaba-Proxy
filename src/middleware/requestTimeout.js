@@ -22,7 +22,7 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
     req.isStreaming = isStreamingRequest
     req.timeoutMs = timeoutMs
 
-    // CRITICAL FIX: Stream-aware timeout handling
+    // ENHANCEMENT: Stream-aware timeout with coordinated cancellation
     const timeout = setTimeout(() => {
       const duration = Date.now() - startTime
 
@@ -35,9 +35,27 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
         isStreaming: isStreamingRequest
       })
 
-      // CRITICAL FIX: Only send timeout response if headers haven't been sent
-      // This prevents "Cannot set headers after they are sent to the client" errors
-      if (!res.headersSent) {
+      // ENHANCEMENT: Check for ResponseState coordination first
+      if (res.cancelAllTimeouts && typeof res.cancelAllTimeouts === 'function') {
+        try {
+          const cancelled = res.cancelAllTimeouts('request_timeout')
+          if (cancelled) {
+            logger.debug('Timeout cancelled by ResponseState coordination', {
+              requestId,
+              duration: `${duration}ms`
+            })
+            return // Don't proceed with timeout response
+          }
+        } catch (error) {
+          logger.warn('Failed to cancel timeouts via ResponseState', {
+            requestId,
+            error: error.message
+          })
+        }
+      }
+
+      // ENHANCEMENT: Only send timeout response if headers haven't been sent AND response isn't already terminated
+      if (!res.headersSent && !res.writableEnded) {
         try {
           res.status(408).json({
             error: {
@@ -55,11 +73,13 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
           })
         }
       } else {
-        // For streaming requests where headers are already sent, just log and let the stream handle it
-        logger.debug('Timeout reached but headers already sent, allowing stream to continue', {
+        // For streaming requests where headers are already sent or response ended, just log
+        logger.debug('Timeout reached but response already sent or ended, skipping timeout response', {
           requestId,
           isStreaming: isStreamingRequest,
-          duration: `${duration}ms`
+          duration: `${duration}ms`,
+          headersSent: res.headersSent,
+          writableEnded: res.writableEnded
         })
       }
 
@@ -78,6 +98,46 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
       }
     }, timeoutMs)
 
+    // ENHANCEMENT: Register timeout with ResponseState for coordinated cancellation
+    if (res.registerTimeoutCallback && typeof res.registerTimeoutCallback === 'function') {
+      try {
+        const registered = res.registerTimeoutCallback((reason) => {
+          clearTimeout(timeout)
+          logger.debug('Request timeout cancelled via ResponseState', {
+            requestId,
+            reason,
+            duration: `${Date.now() - startTime}ms`
+          })
+        })
+        
+        if (registered) {
+          logger.debug('Request timeout registered with ResponseState', {
+            requestId,
+            timeoutMs,
+            isStreaming: isStreamingRequest
+          })
+        }
+      } catch (error) {
+        logger.warn('Failed to register timeout with ResponseState', {
+          requestId,
+          error: error.message
+        })
+      }
+    }
+
+    // Store timeout reference for potential manual cleanup and ResponseState coordination
+    req.timeoutRef = timeout
+    if (res.setRequestTimeoutRef && typeof res.setRequestTimeoutRef === 'function') {
+      try {
+        res.setRequestTimeoutRef(timeout)
+      } catch (error) {
+        logger.warn('Failed to set timeout reference in ResponseState', {
+          requestId,
+          error: error.message
+        })
+      }
+    }
+
     // Clear timeout when request completes
     const cleanup = () => {
       clearTimeout(timeout)
@@ -93,14 +153,23 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
           isStreaming: isStreamingRequest
         })
       }
+
+      // ENHANCEMENT: Cancel all registered timeouts on cleanup
+      if (res.cancelAllTimeouts && typeof res.cancelAllTimeouts === 'function') {
+        try {
+          res.cancelAllTimeouts('request_completed')
+        } catch (error) {
+          logger.warn('Failed to cancel timeouts during cleanup', {
+            requestId,
+            error: error.message
+          })
+        }
+      }
     }
 
     // Listen for response finish or close events
     res.on('finish', cleanup)
     res.on('close', cleanup)
-
-    // Store timeout reference for potential manual cleanup
-    req.timeoutRef = timeout
 
     next()
   }
