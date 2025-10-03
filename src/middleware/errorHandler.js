@@ -1,6 +1,16 @@
 import { logger } from '../services/logger.js'
 
 export const errorHandler = (error, req, res, next) => {
+  // If the response has already been sent, do not attempt to modify headers
+  if (res.headersSent || res.writableEnded) {
+    logger.warn('Error handler invoked after response already sent', {
+      requestId: req.id,
+      error: error.message,
+      headersSent: res.headersSent,
+      writableEnded: res.writableEnded
+    })
+    return
+  }
   // Log the error
   logger.error('Request error', {
     message: error.message,
