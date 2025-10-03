@@ -4,15 +4,47 @@ import { config } from '../config/index.js'
 import { createResponseState, withStreamingErrorBoundary, SafeSSEWriter } from './responseState.js'
 
 // Handle streaming response
-export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, requestId) {
+export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayload, requestId) {
   // Create response state tracker
   const responseState = createResponseState(res, requestId)
+
+  // Clear the request timeout for streaming requests to prevent conflicts
+  if (req.timeoutRef) {
+    clearTimeout(req.timeoutRef)
+    req.timeoutRef = null
+    logger.debug('Cleared request timeout for streaming', { requestId })
+  }
 
   // Add abort controller for request cancellation
   const abortController = new AbortController()
   const timeoutRef = setTimeout(() => {
     abortController.abort()
   }, 55000) // 55 second timeout for streaming
+  // Enhanced disconnect detection
+  let isClientDisconnected = false
+  
+  // Handle response errors
+  const handleResponseError = (error) => {
+    logger.error('Response error during streaming', {
+      requestId,
+      error: error.message,
+      code: error.code
+    })
+    
+    if (!isClientDisconnected) {
+      abortController.abort()
+      responseState.destroy()
+    }
+  }
+
+  // Handle request abort (client cancelled)
+  req.on('aborted', () => {
+    logger.info('Request aborted by client', { requestId })
+    handleClientDisconnect()
+  })
+  
+  // Listen for response errors
+  res.on('error', handleResponseError)
 
   // Handle client disconnect
   const handleClientDisconnect = () => {
@@ -23,7 +55,14 @@ export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, 
 
   // Listen for client disconnect
   res.on('close', handleClientDisconnect)
-  res.on('finish', () => clearTimeout(timeoutRef))
+  res.on('finish', () => {
+    clearTimeout(timeoutRef)
+    // Clear any remaining request timeout
+    if (req.timeoutRef) {
+      clearTimeout(req.timeoutRef)
+      req.timeoutRef = null
+    }
+  })
   
   return withStreamingErrorBoundary(async (responseState) => {
     // Set SSE headers safely

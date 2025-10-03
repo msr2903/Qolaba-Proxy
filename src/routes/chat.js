@@ -53,7 +53,7 @@ router.post('/',
       // Handle streaming vs non-streaming requests
       if (req.body.stream === true) {
         try {
-          await handleStreamingResponse(res, qolabaClient, qolabaPayload, req.id)
+          await handleStreamingResponse(res, req, qolabaClient, qolabaPayload, req.id)
         } catch (streamingError) {
           // Streaming errors are already handled by the streaming utility
           // Just log and re-throw to let the error handler middleware deal with it

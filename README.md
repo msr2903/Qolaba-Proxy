@@ -115,6 +115,108 @@ The proxy automatically maps OpenAI model names to Qolaba models:
 
 **POST** `/v1/chat/completions`
 
+
+## 🔑 **Using the Test API Key**
+
+For testing purposes, you can use the built-in test API key:
+
+**Test API Key:** `your-test-api-key-here`
+
+**Usage Examples (Windows CMD):**
+```cmd
+rem Using test API key for models list
+curl http://localhost:3000/v1/models -H "Authorization: Bearer your-test-api-key-here"
+
+rem Using test API key for chat completion
+curl -X POST http://localhost:3000/v1/chat/completions ^
+  -H "Content-Type: application/json" ^
+  -H "Authorization: Bearer your-test-api-key-here" ^
+  -d "{\"model\": \"gpt-4.1-mini-2025-04-14\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}"
+```
+
+**Usage Examples (PowerShell):**
+```powershell
+# Using test API key for models list
+curl http://localhost:3000/v1/models -H "Authorization: Bearer your-test-api-key-here"
+
+# Using test API key for chat completion
+curl -X POST http://localhost:3000/v1/chat/completions `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer your-test-api-key-here" `
+  -d '{"model": "gpt-4.1-mini-2025-04-14", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+**Note:** This test key is provided for development and testing only. For production use, replace it with your actual Qolaba API key.
+
+
+## 🖥️ **Windows Command Line Reference**
+
+### Health Check Commands (Windows CMD)
+```cmd
+rem Basic health check
+curl http://localhost:3000/health
+
+rem Detailed health with metrics
+curl http://localhost:3000/health/detailed
+
+rem System readiness
+curl http://localhost:3000/health/ready
+
+rem Liveness probe
+curl http://localhost:3000/health/live
+```
+
+### Health Check Commands (Windows PowerShell)
+```powershell
+# Basic health check
+curl http://localhost:3000/health
+
+# Detailed health with metrics
+curl http://localhost:3000/health/detailed
+
+# System readiness
+curl http://localhost:3000/health/ready
+
+# Liveness probe
+curl http://localhost:3000/health/live
+```
+
+### API Testing (Windows CMD)
+```cmd
+rem Models list
+curl http://localhost:3000/v1/models -H "Authorization: Bearer YOUR_API_KEY"
+
+rem Chat completion (non-streaming)
+curl -X POST http://localhost:3000/v1/chat/completions ^
+  -H "Content-Type: application/json" ^
+  -H "Authorization: Bearer YOUR_API_KEY" ^
+  -d "{\"model\": \"gpt-4.1-mini-2025-04-14\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}"
+
+rem Chat completion (streaming)
+curl -X POST http://localhost:3000/v1/chat/completions ^
+  -H "Content-Type: application/json" ^
+  -H "Authorization: Bearer YOUR_API_KEY" ^
+  -d "{\"model\": \"gpt-4.1-mini-2025-04-14\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}], \"stream\": true}"
+```
+
+### API Testing (Windows PowerShell)
+```powershell
+# Models list
+curl http://localhost:3000/v1/models -H "Authorization: Bearer YOUR_API_KEY"
+
+# Chat completion (non-streaming)
+curl -X POST http://localhost:3000/v1/chat/completions `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer YOUR_API_KEY" `
+  -d '{"model": "gpt-4.1-mini-2025-04-14", "messages": [{"role": "user", "content": "Hello"}]}'
+
+# Chat completion (streaming)
+curl -X POST http://localhost:3000/v1/chat/completions `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer YOUR_API_KEY" `
+  -d '{"model": "gpt-4.1-mini-2025-04-14", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+```
+
 OpenAI-compatible chat completions endpoint with streaming support.
 
 ```bash

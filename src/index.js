@@ -10,6 +10,8 @@ import { errorHandler } from './middleware/errorHandler.js'
 import { requestLogger } from './middleware/requestLogger.js'
 import { rateLimit } from './middleware/rateLimit.js'
 import { requestTimeout } from './middleware/requestTimeout.js'
+import { handleJsonParsingError } from './middleware/jsonValidator.js'
+import { healthMonitor } from './middleware/healthMonitor.js'
 
 // Import routes
 import chatRoutes from './routes/chat.js'
@@ -33,8 +35,15 @@ app.use(cors({
   origin: config.cors.origin,
   credentials: config.cors.credentials
 }))
+
+// Enhanced error handling for JSON parsing
+app.use(handleJsonParsingError)
+
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+
+// Health monitoring
+app.use(healthMonitor())
 
 // Logging middleware
 if (config.logging.enabled) {

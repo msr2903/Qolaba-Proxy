@@ -37,13 +37,6 @@
         "--repository",
         "D:\\AI\\qoloba-proxy2\\"
       ]
-    },
-    "memory": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-memory"
-      ]
     }
   }
 }

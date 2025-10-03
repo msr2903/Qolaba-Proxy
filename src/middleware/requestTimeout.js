@@ -2,13 +2,25 @@ import { logger } from '../services/logger.js'
 import { TimeoutError } from './errorHandler.js'
 
 /**
- * Request timeout middleware for non-streaming requests
- * Prevents hanging requests by enforcing timeouts
+ * Smart request timeout middleware that distinguishes between streaming and non-streaming requests
+ * Prevents hanging requests by enforcing appropriate timeouts
  */
-export const requestTimeout = (timeoutMs = 30000) => {
+export const requestTimeout = (defaultTimeoutMs = 30000) => {
   return (req, res, next) => {
     const startTime = Date.now()
     const requestId = req.id || 'unknown'
+    
+    // Determine if this is a streaming request
+    const isStreamingRequest = detectStreamingRequest(req)
+    
+    // Set appropriate timeout based on request type
+    const timeoutMs = isStreamingRequest ?
+      Math.max(defaultTimeoutMs * 4, 120000) : // 4x default or 2 minutes minimum for streaming
+      defaultTimeoutMs
+
+    // Mark the request as streaming for other middleware
+    req.isStreaming = isStreamingRequest
+    req.timeoutMs = timeoutMs
 
     // Set a timeout for the request
     const timeout = setTimeout(() => {
@@ -19,29 +31,40 @@ export const requestTimeout = (timeoutMs = 30000) => {
         method: req.method,
         url: req.url,
         duration: `${duration}ms`,
-        timeout: `${timeoutMs}ms`
+        timeout: `${timeoutMs}ms`,
+        isStreaming: isStreamingRequest
       })
 
-      // Clean up the response if it hasn't been sent yet
+      // Try to gracefully close the response
       if (!res.headersSent) {
-        res.destroy()
-      }
-
-      // Send timeout error if response is still writable
-      if (!res.headersSent) {
-        res.status(408).json({
-          error: {
-            message: `Request timeout after ${timeoutMs}ms`,
-            type: 'api_error',
-            code: 'timeout',
-            request_id: requestId
-          }
-        })
+        try {
+          res.status(408).json({
+            error: {
+              message: `Request timeout after ${timeoutMs}ms`,
+              type: 'api_error',
+              code: 'timeout',
+              request_id: requestId,
+              streaming: isStreamingRequest
+            }
+          })
+        } catch (error) {
+          logger.warn('Failed to send timeout response', {
+            requestId,
+            error: error.message
+          })
+        }
       }
 
       // Force close the connection if needed
-      if (res.connection && !res.connection.destroyed) {
-        res.connection.destroy()
+      try {
+        if (res.socket && !res.socket.destroyed) {
+          res.socket.destroy()
+        }
+      } catch (error) {
+        logger.warn('Failed to destroy socket on timeout', {
+          requestId,
+          error: error.message
+        })
       }
     }, timeoutMs)
 
@@ -56,7 +79,8 @@ export const requestTimeout = (timeoutMs = 30000) => {
           method: req.method,
           url: req.url,
           duration: `${duration}ms`,
-          timeout: `${timeoutMs}ms`
+          timeout: `${timeoutMs}ms`,
+          isStreaming: isStreamingRequest
         })
       }
     }
@@ -70,6 +94,34 @@ export const requestTimeout = (timeoutMs = 30000) => {
 
     next()
   }
+}
+
+/**
+ * Detect if a request is likely to be a streaming request
+ */
+function detectStreamingRequest(req) {
+  // Check URL path
+  if (req.path === '/v1/chat/completions' && req.method === 'POST') {
+    return true
+  }
+  
+  // Check if request body has stream: true
+  if (req.body && req.body.stream === true) {
+    return true
+  }
+  
+  // Check for streaming-related headers
+  const streamingHeaders = [
+    'text/event-stream',
+    'application/x-ndjson'
+  ]
+  
+  const acceptHeader = req.get('Accept') || req.get('accept')
+  if (acceptHeader && streamingHeaders.some(header => acceptHeader.includes(header))) {
+    return true
+  }
+  
+  return false
 }
 
 /**
