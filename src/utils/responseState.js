@@ -362,7 +362,12 @@
             requestId: this.requestId,
             reason
           })
-          this.safeEnd()
+          // CRITICAL FIX: For streaming responses, don't pass data to end() if headers already sent
+          if (this.isHeadersSent) {
+            this.safeEnd()
+          } else {
+            this.safeEnd()
+          }
         } else {
           logger.debug('Skipping response end - already ended or cannot write', {
             requestId: this.requestId,
@@ -584,7 +589,13 @@
       }
   
       try {
-        return this.responseState.safeWrite('data: [DONE]\n\n')
+        // Write the DONE marker
+        const success = this.responseState.safeWrite('data: [DONE]\n\n')
+        
+        // CRITICAL FIX: Don't end the response here - let coordinatedTermination handle it
+        // This prevents "Cannot set headers after they are sent to the client" error
+        
+        return success
       } catch (error) {
         logger.error('Failed to write SSE DONE', {
           requestId: this.responseState.requestId,

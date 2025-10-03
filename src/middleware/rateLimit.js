@@ -164,7 +164,12 @@ export const createRateLimit = (options = {}) => {
         const remaining = Math.max(0, maxRequests - data.count)
         res.set('X-RateLimit-Remaining', remaining)
         
-        originalEnd.call(this, chunk, encoding)
+        // CRITICAL FIX: For streaming responses, don't pass parameters to end() if headers already sent
+        if (res.headersSent) {
+          originalEnd.call(this)
+        } else {
+          originalEnd.call(this, chunk, encoding)
+        }
       }
       
       const remaining = Math.max(0, maxRequests - data.count)

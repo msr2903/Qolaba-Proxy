@@ -39,8 +39,12 @@ export const requestLogger = (req, res, next) => {
       contentType: res.get('Content-Type')
     })
     
-    // Call original end
-    originalEnd.call(this, chunk, encoding)
+    // CRITICAL FIX: For streaming responses, don't pass parameters to end() if headers already sent
+    if (res.headersSent) {
+      originalEnd.call(this)
+    } else {
+      originalEnd.call(this, chunk, encoding)
+    }
   }
   
   // Override res.json to log JSON responses
@@ -79,7 +83,12 @@ export const requestTimer = (req, res, next) => {
       })
     }
     
-    originalEnd.call(this, chunk, encoding)
+    // CRITICAL FIX: For streaming responses, don't pass parameters to end() if headers already sent
+    if (res.headersSent) {
+      originalEnd.call(this)
+    } else {
+      originalEnd.call(this, chunk, encoding)
+    }
   }
   
   next()
@@ -141,7 +150,12 @@ export const responseSizeLogger = (req, res, next) => {
       })
     }
     
-    originalEnd.call(this, chunk, encoding)
+    // CRITICAL FIX: For streaming responses, don't pass parameters to end() if headers already sent
+    if (res.headersSent) {
+      originalEnd.call(this)
+    } else {
+      originalEnd.call(this, chunk, encoding)
+    }
   }
   
   next()

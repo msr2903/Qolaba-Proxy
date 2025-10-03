@@ -97,8 +97,12 @@ export const healthMonitor = (options = {}) => {
       // Check for alerts
       checkAlerts(healthData, alertThresholds, requestId)
 
-      // Call original end
-      originalEnd.call(this, chunk, encoding)
+      // CRITICAL FIX: For streaming responses, don't pass parameters to end() if headers already sent
+      if (res.headersSent) {
+        originalEnd.call(this)
+      } else {
+        originalEnd.call(this, chunk, encoding)
+      }
     }
 
     // Track client disconnects for streaming
