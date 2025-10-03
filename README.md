@@ -481,3 +481,6 @@ If you encounter issues or have questions:
 ---
 
 **Built with ❤️ for the AI development community**
+// Note for test workflows
+// Important: Start the server before running test scripts to observe streaming in real-time.
+// See ai.md for detailed knowledge base and testing guidelines.

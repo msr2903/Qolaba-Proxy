@@ -144,6 +144,20 @@ export class QolabaApiClient {
                   const responseTime = Date.now() - startTime
                   logQolabaRequest('/streamChat', 'POST', payload, responseTime, 200)
                   
+                  // CRITICAL FIX: Ensure proper stream cleanup on completion
+                  if (response.data && typeof response.data.destroy === 'function') {
+                    try {
+                      response.data.destroy()
+                      logger.debug('Stream destroyed successfully on completion', {
+                        requestId: 'unknown' // We don't have requestId here
+                      })
+                    } catch (destroyError) {
+                      logger.warn('Failed to destroy stream on completion', {
+                        error: destroyError.message
+                      })
+                    }
+                  }
+                  
                   resolve({
                     output: totalOutput,
                     usage: {
@@ -192,6 +206,20 @@ export class QolabaApiClient {
           
           isStreamEnded = true
           const responseTime = Date.now() - startTime
+          
+          // CRITICAL FIX: Ensure proper stream cleanup
+          if (response.data && typeof response.data.destroy === 'function') {
+            try {
+              response.data.destroy()
+              logger.debug('Stream destroyed successfully', {
+                requestId: 'unknown' // We don't have requestId here
+              })
+            } catch (destroyError) {
+              logger.warn('Failed to destroy stream on end', {
+                error: destroyError.message
+              })
+            }
+          }
           
           // If we didn't get a proper completion signal, resolve with what we have
           if (totalOutput.length > 0) {

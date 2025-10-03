@@ -19,7 +19,14 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
   const abortController = new AbortController()
   const timeoutRef = setTimeout(() => {
     abortController.abort()
+    // CRITICAL FIX: Force response termination on timeout to prevent hanging
+    logger.warn('Streaming timeout reached, forcing response termination', { requestId })
+    if (responseState.res.canWrite()) {
+      responseState.safeEnd()
+    }
+    responseState.destroy()
   }, 55000) // 55 second timeout for streaming
+  
   // Enhanced disconnect detection
   let isClientDisconnected = false
   
@@ -149,6 +156,14 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
       model: qolabaPayload.model
     })
 
+    // CRITICAL FIX: Properly end the response to prevent hanging
+    if (responseState.res.canWrite()) {
+      logger.debug('Ending streaming response', { requestId })
+      responseState.safeEnd()
+    } else {
+      logger.warn('Response already ended or destroyed, skipping end()', { requestId })
+    }
+
   }, responseState, async (error, responseState) => {
     // Custom error handler for streaming
     logger.error('Streaming error handler called', {
@@ -179,6 +194,12 @@ export async function handleStreamingResponse(res, req, qolabaClient, qolabaPayl
       const sseWriter = new SafeSSEWriter(responseState)
       sseWriter.writeEvent(errorChunk)
       sseWriter.writeDone()
+      
+      // CRITICAL FIX: Properly end the response even in error case
+      if (responseState.res.canWrite()) {
+        logger.debug('Ending streaming response after error', { requestId })
+        responseState.safeEnd()
+      }
     }
   })
 }
