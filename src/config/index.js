@@ -42,7 +42,20 @@ export const config = {
   performance: {
     maxResponseSize: parseInt(process.env.MAX_RESPONSE_SIZE) || 10485760, // 10MB
     concurrentRequests: parseInt(process.env.CONCURRENT_REQUESTS_LIMIT) || 100,
-    connectionTimeout: parseInt(process.env.CONNECTION_TIMEOUT) || 30000
+    connectionTimeout: parseInt(process.env.CONNECTION_TIMEOUT) || 30000,
+    keepAliveTimeout: parseInt(process.env.KEEP_ALIVE_TIMEOUT) || 65000,
+    maxSockets: parseInt(process.env.MAX_SOCKETS) || 100,
+    maxFreeSockets: parseInt(process.env.MAX_FREE_SOCKETS) || 10,
+    socketTimeout: parseInt(process.env.SOCKET_TIMEOUT) || 60000
+  },
+
+  connectionPool: {
+    maxSockets: parseInt(process.env.MAX_SOCKETS) || 100,
+    maxFreeSockets: parseInt(process.env.MAX_FREE_SOCKETS) || 10,
+    keepAlive: process.env.KEEP_ALIVE !== 'false',
+    keepAliveMsecs: parseInt(process.env.KEEP_ALIVE_MSECS) || 30000,
+    maxCachedSessions: parseInt(process.env.MAX_CACHED_SESSIONS) || 100,
+    timeout: parseInt(process.env.CONNECTION_POOL_TIMEOUT) || 60000
   },
 
   monitoring: {

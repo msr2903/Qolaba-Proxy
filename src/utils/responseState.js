@@ -301,18 +301,13 @@ export class SafeSSEWriter {
     }
   }
 
-  writeDone
-
-() {
+  writeDone() {
     if (!this.responseState.res.canWrite()) {
       return false
     }
 
     try {
-    
-
-return this.responseState.safe
-Write('data: [DONE]\\n\\n')
+      return this.responseState.safeWrite('data: [DONE]\n\n')
     } catch (error) {
       logger.error('Failed to write SSE DONE', {
         requestId: this.responseState.requestId,

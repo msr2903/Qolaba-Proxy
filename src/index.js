@@ -9,11 +9,13 @@ import { createServer } from 'http'
 import { errorHandler } from './middleware/errorHandler.js'
 import { requestLogger } from './middleware/requestLogger.js'
 import { rateLimit } from './middleware/rateLimit.js'
+import { requestTimeout } from './middleware/requestTimeout.js'
 
 // Import routes
 import chatRoutes from './routes/chat.js'
 import modelsRoutes from './routes/models.js'
 import healthRoutes from './routes/health.js'
+import connectionHealthRoutes from './routes/connectionHealth.js'
 
 // Import services
 import { logger } from './services/logger.js'
@@ -40,11 +42,15 @@ if (config.logging.enabled) {
 }
 app.use(requestLogger)
 
+// Request timeout middleware (prevents hanging requests)
+app.use(requestTimeout(30000)) // 30 second timeout for non-streaming requests
+
 // Rate limiting
 app.use(rateLimit)
 
-// Health check endpoint (before other routes)
+// Health check endpoints (before other routes)
 app.use('/health', healthRoutes)
+app.use('/v1/health', connectionHealthRoutes)
 
 // API routes
 app.use('/v1/chat/completions', chatRoutes)
@@ -113,12 +119,7 @@ const startServer = async () => {
   }
 }
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error)
-  process.exit(1)
-})
-
+// Handle unhandled rejections first
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', {
     promise: promise.toString(),
@@ -139,7 +140,7 @@ process.on('unhandledRejection', (reason, promise) => {
   }
 })
 
-// Handle uncaught exceptions with better logging
+// Handle uncaught exceptions with comprehensive logging (REMOVED DUPLICATE)
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', {
     message: error.message,

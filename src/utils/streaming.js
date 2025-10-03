@@ -7,6 +7,23 @@ import { createResponseState, withStreamingErrorBoundary, SafeSSEWriter } from '
 export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, requestId) {
   // Create response state tracker
   const responseState = createResponseState(res, requestId)
+
+  // Add abort controller for request cancellation
+  const abortController = new AbortController()
+  const timeoutRef = setTimeout(() => {
+    abortController.abort()
+  }, 55000) // 55 second timeout for streaming
+
+  // Handle client disconnect
+  const handleClientDisconnect = () => {
+    logger.info('Client disconnected during streaming', { requestId })
+    abortController.abort()
+    responseState.destroy()
+  }
+
+  // Listen for client disconnect
+  res.on('close', handleClientDisconnect)
+  res.on('finish', () => clearTimeout(timeoutRef))
   
   return withStreamingErrorBoundary(async (responseState) => {
     // Set SSE headers safely

@@ -12,8 +12,30 @@ export class QolabaApiClient {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
-      }
+      },
+      // Connection pool configuration
+      maxSockets: config.connectionPool.maxSockets,
+      maxFreeSockets: config.connectionPool.maxFreeSockets,
+      keepAlive: config.connectionPool.keepAlive,
+      keepAliveMsecs: config.connectionPool.keepAliveMsecs,
+      maxCachedSessions: config.connectionPool.maxCachedSessions,
+      // Additional connection settings
+      maxRedirects: 5,
+      validateStatus: (status) => status < 500, // Don't throw on 4xx errors
+      // Socket timeout settings
+      socketTimeout: config.performance.socketTimeout,
+      connectionTimeout: config.performance.connectionTimeout
     })
+
+    // Add connection health tracking
+    this.connectionHealth = {
+      totalRequests: 0,
+      failedRequests: 0,
+      lastError: null,
+      lastErrorTime: null,
+      consecutiveFailures: 0,
+      maxConsecutiveFailures: 5
+    }
 
     // Request interceptor for logging
     this.client.interceptors.request.use(
@@ -193,19 +215,37 @@ export class QolabaApiClient {
         response.data.on('error', handleError)
         response.data.on('end', handleEnd)
         
-        // Handle stream timeout
+        // Handle stream timeout with proper cleanup
         const timeout = setTimeout(() => {
           if (!isStreamEnded) {
             isStreamEnded = true
-            response.data.destroy() // Clean up the stream
+            logger.warn('Stream timeout reached, cleaning up', {
+              requestId: 'unknown', // We don't have requestId here
+              timeout: '55000ms'
+            })
+
+            // Properly destroy the stream and cleanup
+            if (response.data && typeof response.data.destroy === 'function') {
+              response.data.destroy()
+            }
+
+            // Clean up axios request if possible
+            if (response.request && typeof response.request.destroy === 'function') {
+              response.request.destroy()
+            }
+
             reject(new Error('Streaming timeout'))
           }
         }, 55000) // Slightly less than the axios timeout
 
         // Clean up timeout when promise resolves/rejects
-        Promise.resolve().finally(() => {
-          clearTimeout(timeout)
-        })
+        const cleanup = () => {
+          if (timeout) {
+            clearTimeout(timeout)
+          }
+        }
+
+        Promise.resolve().finally(cleanup)
       })
     } catch (error) {
       const responseTime = Date.now() - startTime
@@ -323,6 +363,59 @@ export class QolabaApiClient {
       logger.error('Failed to get usage info:', error)
       throw error
     }
+  }
+
+  /**
+   * Get connection health status
+   */
+  getConnectionHealth() {
+    return {
+      ...this.connectionHealth,
+      successRate: this.connectionHealth.totalRequests > 0
+        ? ((this.connectionHealth.totalRequests - this.connectionHealth.failedRequests) / this.connectionHealth.totalRequests * 100).toFixed(2)
+        : 100,
+      isHealthy: this.connectionHealth.consecutiveFailures < this.connectionHealth.maxConsecutiveFailures
+    }
+  }
+
+  /**
+   * Reset connection health tracking
+   */
+  resetConnectionHealth() {
+    this.connectionHealth = {
+      totalRequests: 0,
+      failedRequests: 0,
+      lastError: null,
+      lastErrorTime: null,
+      consecutiveFailures: 0,
+      maxConsecutiveFailures: 5
+    }
+  }
+
+  /**
+   * Check if client should attempt request based on health
+   */
+  shouldAttemptRequest() {
+    return this.connectionHealth.consecutiveFailures < this.connectionHealth.maxConsecutiveFailures
+  }
+
+  /**
+   * Record successful request
+   */
+  recordSuccess() {
+    this.connectionHealth.totalRequests++
+    this.connectionHealth.consecutiveFailures = 0
+  }
+
+  /**
+   * Record failed request
+   */
+  recordFailure(error) {
+    this.connectionHealth.totalRequests++
+    this.connectionHealth.failedRequests++
+    this.connectionHealth.consecutiveFailures++
+    this.connectionHealth.lastError = error.message
+    this.connectionHealth.lastErrorTime = new Date().toISOString()
   }
 }
 
