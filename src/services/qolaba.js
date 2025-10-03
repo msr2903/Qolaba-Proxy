@@ -2,6 +2,7 @@
 import axios from 'axios'
 import { config } from '../config/index.js'
 import { logger, logQolabaRequest } from './logger.js'
+import { safeStringify } from '../utils/serialization.js'
 
 export class QolabaApiClient {
   constructor(apiKey) {
@@ -36,7 +37,7 @@ export class QolabaApiClient {
         logger.debug('Qolaba API response', {
           status: response.status,
           statusText: response.statusText,
-          dataSize: JSON.stringify(response.data).length
+          dataSize: safeStringify(response.data).length
         })
         return response
       },
@@ -68,70 +69,156 @@ export class QolabaApiClient {
         headers: {
           'Accept': 'text/event-stream',
           'Cache-Control': 'no-cache'
-        }
+        },
+        timeout: 60000 // 60 second timeout for streaming
       })
 
       let buffer = ''
       let totalOutput = ''
+      let isStreamEnded = false
       
       return new Promise((resolve, reject) => {
-        response.data.on('data', (chunk) => {
-          buffer += chunk.toString()
-          
-          // Process complete SSE messages
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || '' // Keep incomplete line in buffer
-          
-          for (const line of lines) {
-            if (line.trim() === '') continue
-            
-            try {
-              // Parse JSON response from Qolaba
-              const data = JSON.parse(line.trim())
-              
-              if (data.output) {
-                totalOutput += data.output
-                onChunk({
-                  output: data.output,
-                  done: false
-                })
-              }
-              
-              // Check if stream is complete
-              if (data.output === null) {
-                const responseTime = Date.now() - startTime
-                logQolabaRequest('/streamChat', 'POST', payload, responseTime, 200)
-                
-                resolve({
-                  output: totalOutput,
-                  usage: {
-                    promptTokens: data.promptTokens || 0,
-                    completionTokens: data.completionTokens || 0,
-                    totalTokens: (data.promptTokens || 0) + (data.completionTokens || 0)
-                  }
-                })
-              }
-            } catch (parseError) {
-              logger.warn('Failed to parse streaming response:', line, parseError.message)
+        // Handle stream data with proper error handling
+        const handleData = (chunk) => {
+          try {
+            if (isStreamEnded) {
+              logger.warn('Received data after stream ended')
+              return
             }
+            
+            buffer += chunk.toString()
+            
+            // Process complete SSE messages
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || '' // Keep incomplete line in buffer
+            
+            for (const line of lines) {
+              if (line.trim() === '') continue
+              
+              try {
+                // Parse JSON response from Qolaba
+                const data = JSON.parse(line.trim())
+                
+                if (data.output !== null && data.output !== undefined) {
+                  totalOutput += data.output
+                  
+                  try {
+                    onChunk({
+                      output: data.output,
+                      done: false
+                    })
+                  } catch (chunkError) {
+                    logger.error('Error in chunk callback', {
+                      error: chunkError.message,
+                      chunk: data.output?.substring(0, 100)
+                    })
+                    // Don't reject the promise, just continue
+                  }
+                }
+                
+                // Check if stream is complete
+                if (data.output === null) {
+                  isStreamEnded = true
+                  const responseTime = Date.now() - startTime
+                  logQolabaRequest('/streamChat', 'POST', payload, responseTime, 200)
+                  
+                  resolve({
+                    output: totalOutput,
+                    usage: {
+                      promptTokens: data.promptTokens || 0,
+                      completionTokens: data.completionTokens || 0,
+                      totalTokens: (data.promptTokens || 0) + (data.completionTokens || 0)
+                    }
+                  })
+                  return
+                }
+              } catch (parseError) {
+                logger.warn('Failed to parse streaming response', {
+                  line: line.substring(0, 100),
+                  error: parseError.message
+                })
+              }
+            }
+          } catch (dataError) {
+            logger.error('Error processing stream data', {
+              error: dataError.message
+            })
+            // Don't reject immediately, let the stream continue
           }
-        })
+        }
 
-        response.data.on('error', (error) => {
+        // Handle stream errors
+        const handleError = (error) => {
+          if (isStreamEnded) return
+          
+          isStreamEnded = true
           const responseTime = Date.now() - startTime
           logQolabaRequest('/streamChat', 'POST', payload, responseTime, 'ERROR')
-          reject(error)
-        })
+          
+          logger.error('Stream error occurred', {
+            error: error.message,
+            code: error.code,
+            responseTime: `${responseTime}ms`
+          })
+          
+          reject(new Error(`Streaming error: ${error.message}`))
+        }
 
-        response.data.on('end', () => {
+        // Handle stream end
+        const handleEnd = () => {
+          if (isStreamEnded) return
+          
+          isStreamEnded = true
           const responseTime = Date.now() - startTime
-          logQolabaRequest('/streamChat', 'POST', payload, responseTime, 200)
+          
+          // If we didn't get a proper completion signal, resolve with what we have
+          if (totalOutput.length > 0) {
+            logQolabaRequest('/streamChat', 'POST', payload, responseTime, 200)
+            resolve({
+              output: totalOutput,
+              usage: {
+                promptTokens: 0,
+                completionTokens: totalOutput.length / 4, // Rough estimate
+                totalTokens: totalOutput.length / 4
+              }
+            })
+          } else {
+            logQolabaRequest('/streamChat', 'POST', payload, responseTime, 'ERROR')
+            reject(new Error('Stream ended without completing'))
+          }
+        }
+
+        // Set up event listeners with proper error handling
+        response.data.on('data', handleData)
+        response.data.on('error', handleError)
+        response.data.on('end', handleEnd)
+        
+        // Handle stream timeout
+        const timeout = setTimeout(() => {
+          if (!isStreamEnded) {
+            isStreamEnded = true
+            response.data.destroy() // Clean up the stream
+            reject(new Error('Streaming timeout'))
+          }
+        }, 55000) // Slightly less than the axios timeout
+
+        // Clean up timeout when promise resolves/rejects
+        Promise.resolve().finally(() => {
+          clearTimeout(timeout)
         })
       })
     } catch (error) {
       const responseTime = Date.now() - startTime
       logQolabaRequest('/streamChat', 'POST', payload, responseTime, error.response?.status || 'ERROR')
-      throw error
+      
+      // Add more specific error handling
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Streaming request timeout')
+      } else if (error.code === 'ECONNRESET') {
+        throw new Error('Connection reset during streaming')
+      } else {
+        throw error
+      }
     }
   }
 

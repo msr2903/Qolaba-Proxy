@@ -120,8 +120,47 @@ process.on('uncaughtException', (error) => {
 })
 
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason)
-  process.exit(1)
+  logger.error('Unhandled Rejection at:', {
+    promise: promise.toString(),
+    reason: reason?.message || reason,
+    stack: reason?.stack,
+    timestamp: new Date().toISOString()
+  })
+  
+  // Don't exit immediately in production, just log and continue
+  if (config.server.nodeEnv === 'production') {
+    logger.warn('Unhandled promise rejection caught - continuing in production mode')
+  } else {
+    // In development, exit after a short delay to allow logging
+    setTimeout(() => {
+      logger.error('Exiting due to unhandled promise rejection in development')
+      process.exit(1)
+    }, 1000)
+  }
+})
+
+// Handle uncaught exceptions with better logging
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', {
+    message: error.message,
+    stack: error.stack,
+    timestamp: new Date().toISOString()
+  })
+  
+  // Always exit on uncaught exceptions as they can leave the app in unstable state
+  setTimeout(() => {
+    process.exit(1)
+  }, 1000)
+})
+
+// Add warning for multiple listeners (helps catch memory leaks)
+process.on('warning', (warning) => {
+  logger.warn('Process warning:', {
+    name: warning.name,
+    message: warning.message,
+    stack: warning.stack,
+    timestamp: new Date().toISOString()
+  })
 })
 
 // Start the server

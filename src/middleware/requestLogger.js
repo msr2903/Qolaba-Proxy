@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../services/logger.js'
 import { config } from '../config/index.js'
+import { sanitizeForLogging, safePayloadSize } from '../utils/serialization.js'
 
 export const requestLogger = (req, res, next) => {
   // Generate unique request ID
@@ -89,24 +90,22 @@ export const requestBodyLogger = (req, res, next) => {
   if (config.logging.enabled && config.logging.level === 'debug') {
     const originalJson = req.body
     if (originalJson && Object.keys(originalJson).length > 0) {
-      // Sanitize sensitive data
-      const sanitizedBody = { ...originalJson }
+      // Sanitize sensitive data and use safe serialization
+      const sanitizedBody = sanitizeForLogging(originalJson, {
+        maxDepth: 2,
+        maxStringLength: 100,
+        maxArrayLength: 3
+      })
+      
+      // Redact API keys if present
       if (sanitizedBody.api_key) {
         sanitizedBody.api_key = '[REDACTED]'
-      }
-      if (sanitizedBody.messages) {
-        sanitizedBody.messages = sanitizedBody.messages.map(msg => ({
-          ...msg,
-          content: typeof msg.content === 'string' 
-            ? msg.content.substring(0, 100) + (msg.content.length > 100 ? '...' : '')
-            : msg.content
-        }))
       }
       
       logger.debug('Request body', {
         requestId: req.id,
         body: sanitizedBody,
-        bodySize: JSON.stringify(originalJson).length
+        bodySize: safePayloadSize(originalJson)
       })
     }
   }

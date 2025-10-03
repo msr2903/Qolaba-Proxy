@@ -1,5 +1,6 @@
 import winston from 'winston'
 import { config } from '../config/index.js'
+import { safeStringify, safePayloadSize, sanitizeForLogging } from '../utils/serialization.js'
 
 // Custom log format
 const logFormat = winston.format.combine(
@@ -11,7 +12,8 @@ const logFormat = winston.format.combine(
     
     // Add metadata if present
     if (Object.keys(meta).length > 0) {
-      log += ` ${JSON.stringify(meta)}`
+      const sanitizedMeta = sanitizeForLogging(meta, { maxDepth: 2, maxStringLength: 100 })
+      log += ` ${JSON.stringify(sanitizedMeta)}`
     }
     
     return log
@@ -29,10 +31,12 @@ const verboseLogFormat = winston.format.combine(
     // Add detailed metadata for verbose logging
     if (Object.keys(meta).length > 0) {
       if (meta.requestBody || meta.responseBody) {
-        // Add request/response data in verbose mode
-        log += ` ${JSON.stringify(meta, null, 2)}`
+        // Add request/response data in verbose mode with safe serialization
+        const sanitizedMeta = sanitizeForLogging(meta, { maxDepth: 3, maxStringLength: 500 })
+        log += ` ${JSON.stringify(sanitizedMeta, null, 2)}`
       } else {
-        log += ` ${JSON.stringify(meta)}`
+        const sanitizedMeta = sanitizeForLogging(meta, { maxDepth: 2, maxStringLength: 200 })
+        log += ` ${JSON.stringify(sanitizedMeta)}`
       }
     }
     
@@ -51,13 +55,16 @@ const debugLogFormat = winston.format.combine(
     // Add metadata with special handling for debug level
     if (Object.keys(meta).length > 0) {
       if (meta.requestBody) {
-        log += `\n  Request Body: ${JSON.stringify(meta.requestBody, null, 2)}`
+        const sanitizedBody = sanitizeForLogging(meta.requestBody, { maxDepth: 3, maxStringLength: 300 })
+        log += `\n  Request Body: ${JSON.stringify(sanitizedBody, null, 2)}`
       }
       if (meta.responseBody) {
-        log += `\n  Response Body: ${JSON.stringify(meta.responseBody, null, 2)}`
+        const sanitizedBody = sanitizeForLogging(meta.responseBody, { maxDepth: 3, maxStringLength: 300 })
+        log += `\n  Response Body: ${JSON.stringify(sanitizedBody, null, 2)}`
       }
       if (meta.headers) {
-        log += `\n  Headers: ${JSON.stringify(meta.headers, null, 2)}`
+        const sanitizedHeaders = sanitizeForLogging(meta.headers, { maxDepth: 1, maxStringLength: 100 })
+        log += `\n  Headers: ${JSON.stringify(sanitizedHeaders, null, 2)}`
       }
       // Add other metadata
       const otherMeta = { ...meta }
@@ -65,7 +72,8 @@ const debugLogFormat = winston.format.combine(
       delete otherMeta.responseBody
       delete otherMeta.headers
       if (Object.keys(otherMeta).length > 0) {
-        log += `\n  Other: ${JSON.stringify(otherMeta, null, 2)}`
+        const sanitizedOther = sanitizeForLogging(otherMeta, { maxDepth: 2, maxStringLength: 150 })
+        log += `\n  Other: ${JSON.stringify(sanitizedOther, null, 2)}`
       }
     }
     
@@ -179,7 +187,7 @@ export const logQolabaRequest = (endpoint, method, payload, responseTime, status
     method,
     responseTime: `${responseTime}ms`,
     statusCode,
-    payloadSize: JSON.stringify(payload).length
+    payloadSize: safePayloadSize(payload)
   })
 }
 
@@ -218,10 +226,12 @@ export const logRequestResponse = (req, res, options = {}) => {
   
   if (includeBody) {
     if (req.body && Object.keys(req.body).length > 0) {
-      const bodyStr = JSON.stringify(req.body)
-      logData.requestBody = bodyStr.length > maxBodySize 
-        ? bodyStr.substring(0, maxBodySize) + '...[truncated]' 
-        : req.body
+      const sanitizedBody = sanitizeForLogging(req.body, {
+        maxDepth: 2,
+        maxStringLength: maxBodySize / 2,
+        maxArrayLength: 5
+      })
+      logData.requestBody = sanitizedBody
     }
   }
   

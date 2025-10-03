@@ -1,12 +1,16 @@
 import { logger } from '../services/logger.js'
 import { translateQolabaToOpenAI, extractToolCalls } from './translator.js'
 import { config } from '../config/index.js'
+import { createResponseState, withStreamingErrorBoundary, SafeSSEWriter } from './responseState.js'
 
 // Handle streaming response
 export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, requestId) {
-  try {
-    // Set SSE headers
-    res.writeHead(200, {
+  // Create response state tracker
+  const responseState = createResponseState(res, requestId)
+  
+  return withStreamingErrorBoundary(async (responseState) => {
+    // Set SSE headers safely
+    const headersSet = responseState.safeWriteHeaders(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
@@ -14,10 +18,15 @@ export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, 
       'Access-Control-Allow-Headers': 'Cache-Control'
     })
 
+    if (!headersSet) {
+      throw new Error('Failed to set streaming headers')
+    }
+
     let fullResponse = ''
     let isFirstChunk = true
+    const sseWriter = new SafeSSEWriter(responseState)
 
-    // Start streaming
+    // Start streaming with proper error handling
     await qolabaClient.streamChat(qolabaPayload, (chunk) => {
       if (chunk.output) {
         fullResponse += chunk.output
@@ -39,8 +48,15 @@ export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, 
           ]
         }
 
-        // Send SSE formatted data
-        res.write(`data: ${JSON.stringify(openaiChunk)}\n\n`)
+        // Send SSE formatted data safely
+        const success = sseWriter.writeEvent(openaiChunk)
+        if (!success) {
+          logger.warn('Failed to write streaming chunk', {
+            requestId,
+            model: qolabaPayload.model
+          })
+          return
+        }
 
         // Log first chunk and progress
         if (isFirstChunk) {
@@ -53,7 +69,7 @@ export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, 
       }
     })
 
-    // Send final chunk
+    // Send final chunk safely
     const finalChunk = {
       id: generateChunkId(),
       object: 'chat.completion.chunk',
@@ -68,9 +84,8 @@ export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, 
       ]
     }
 
-    res.write(`data: ${JSON.stringify(finalChunk)}\n\n`)
-    res.write('data: [DONE]\n\n')
-    res.end()
+    sseWriter.writeEvent(finalChunk)
+    sseWriter.writeDone()
 
     logger.info('Streaming completed successfully', {
       requestId,
@@ -78,14 +93,15 @@ export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, 
       model: qolabaPayload.model
     })
 
-  } catch (error) {
-    logger.error('Streaming failed', {
+  }, responseState, async (error, responseState) => {
+    // Custom error handler for streaming
+    logger.error('Streaming error handler called', {
       requestId,
       error: error.message
     })
 
-    // Send error chunk if possible
-    try {
+    // Try to send error chunk if response is still writable
+    if (responseState.res.canWrite()) {
       const errorChunk = {
         id: generateChunkId(),
         object: 'chat.completion.chunk',
@@ -99,19 +115,16 @@ export async function handleStreamingResponse(res, qolabaClient, qolabaPayload, 
           }
         ],
         error: {
-          message: error.message,
+          message: 'Streaming error occurred',
           type: 'api_error'
         }
       }
 
-      res.write(`data: ${JSON.stringify(errorChunk)}\\n\\n`)
-    } catch (writeError) {
-      // If we can't even write the error, just close the connection
+      const sseWriter = new SafeSSEWriter(responseState)
+      sseWriter.writeEvent(errorChunk)
+      sseWriter.writeDone()
     }
-
-    res.end()
-    throw error
-  }
+  })
 }
 
 // Handle non-streaming response
