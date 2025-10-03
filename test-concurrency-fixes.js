@@ -65,7 +65,6 @@ function makeRequest(payload, requestId) {
       chunks.push(chunk)
       
       // Check for DONE marker
-      if
       if (chunk.includes('[DONE]')) {
         console.log(`✅ Request ${requestId}: Streaming completed - DONE marker received`)
         receivedDone = true
@@ -232,7 +231,7 @@ async function testServerHealth() {
 
 // Main test execution
 async function runAllTests() {
-  console.log('🚀 Starting comprehensive concurrency tests...\\n')
+  console.log('🚀 Starting comprehensive concurrency tests...\n')
   
   // First check server health
   const healthResult = await testServerHealth()
@@ -245,7 +244,7 @@ async function runAllTests() {
   
   // Test individual scenarios
   for (const scenario of testScenarios) {
-    console.log(`\\n=== Testing ${scenario.name} ===`)
+    console.log(`\n=== Testing ${scenario.name} ===`)
     
     // Test single request
     const singleResult = await testSingleRequest(scenario)
@@ -263,11 +262,11 @@ async function runAllTests() {
   }
   
   // Final health check after tests
-  console.log(`\\n=== Final Health Check ===`)
+  console.log(`\n=== Final Health Check ===`)
   const finalHealthResult = await testServerHealth()
   
   // Summary
-  console.log(`\\n📈 FINAL TEST RESULTS SUMMARY:`)
+  console.log(`\n📈 FINAL TEST RESULTS SUMMARY:`)
   console.log(`================================`)
   
   const successCount = results.filter(r => r.success).length
@@ -278,7 +277,7 @@ async function runAllTests() {
   console.log(`Failed: ${totalTests - successCount}`)
   console.log(`Success rate: ${((successCount / totalTests) * 100).toFixed(1)}%`)
   
-  console.log(`\\n📋 Detailed Results:`)
+  console.log(`\n📋 Detailed Results:`)
   results.forEach(result => {
     const status = result.success ? '✅' : '❌'
     const duration = result.duration ? ` (${result.duration}ms)` : ''
@@ -286,7 +285,7 @@ async function runAllTests() {
     console.log(`${status} ${result.name}${duration}${error}`)
   })
   
-  console.log(`\\n🏥 Health Status:`)
+  console.log(`\n🏥 Health Status:`)
   console.log(`Initial: ${healthResult.success ? '✅ Healthy' : '❌ Unhealthy'}`)
   console.log(`Final: ${finalHealthResult.success ? '✅ Healthy' : '❌ Unhealthy'}`)
   
@@ -296,11 +295,11 @@ async function runAllTests() {
   }
   
   if (successCount === totalTests && finalHealthResult.success) {
-    console.log(`\\n🎉 ALL TESTS PASSED! Concurrency fixes are working correctly.`)
+    console.log(`\n🎉 ALL TESTS PASSED! Concurrency fixes are working correctly.`)
     console.log(`✅ Hanging request issues have been resolved!`)
     process.exit(0)
   } else {
-    console.log(`\\n💥 SOME TESTS FAILED! There may still be concurrency issues.`)
+    console.log(`\n💥 SOME TESTS FAILED! There may still be concurrency issues.`)
     
     const failedTests = results.filter(r => !r.success)
     console.log(`Failed tests: ${failedTests.map(t => t.name).join(', ')}`)
@@ -350,4 +349,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   main()
 }
 
-export { testSingleRequest, testConcurrentRequests, testServerHealth, runAllTests }
+export { testSingleRequest, testConcurrentRequests, testServerHealth, runAllTests, main }
