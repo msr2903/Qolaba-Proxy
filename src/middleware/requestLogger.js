@@ -21,8 +21,14 @@ export const requestLogger = (req, res, next) => {
     })
   }
   
-  // Add request ID to response headers
-  res.set('X-Request-ID', req.id)
+  // CRITICAL FIX: Store original URL to prevent it from being modified by other middleware
+  req.originalUrl = req.url
+  
+  // CRITICAL FIX: Add request ID to response headers only if headers haven't been sent yet
+  // This prevents "Attempted to write headers on ended or destroyed response" error
+  if (!res.headersSent) {
+    res.set('X-Request-ID', req.id)
+  }
   
   // Log request start
   const startTime = Date.now()
@@ -37,7 +43,8 @@ export const requestLogger = (req, res, next) => {
     contentLength: req.get('Content-Length')
   })
   
-  // Use ResponseManager to log response completion instead of overriding res.end
+  // CRITICAL FIX: Use ResponseManager to log response completion instead of overriding res.end
+  // This prevents conflicts with the response state management
   if (req.responseManager) {
     req.responseManager.onEnd(() => {
       const duration = Date.now() - startTime
@@ -46,7 +53,7 @@ export const requestLogger = (req, res, next) => {
       logger.info('Request completed', {
         requestId: req.id,
         method: req.method,
-        url: req.url,
+        url: req.originalUrl || req.url, // Use original URL if available
         statusCode: res.statusCode,
         duration: `${duration}ms`,
         contentLength: parseInt(contentLength),
@@ -54,7 +61,11 @@ export const requestLogger = (req, res, next) => {
       })
     })
   } else {
-    // Fallback to override res.end if ResponseManager not available
+    // Fallback: Only override res.end if ResponseManager not available
+    logger.warn('ResponseManager not available, using fallback logging', {
+      requestId: req.id || 'unknown'
+    })
+    
     const originalEnd = res.end
     res.end = function(chunk, encoding) {
       const duration = Date.now() - startTime
@@ -99,7 +110,8 @@ export const requestLogger = (req, res, next) => {
 export const requestTimer = (req, res, next) => {
   req.startTime = Date.now()
   
-  // Use ResponseManager to log slow requests instead of overriding res.end
+  // CRITICAL FIX: Use ResponseManager to log slow requests instead of overriding res.end
+  // This prevents conflicts with the response state management
   if (req.responseManager) {
     req.responseManager.onEnd(() => {
       const duration = Date.now() - req.startTime
@@ -109,14 +121,18 @@ export const requestTimer = (req, res, next) => {
         logger.warn('Slow request detected', {
           requestId: req.id,
           method: req.method,
-          url: req.url,
+          url: req.originalUrl || req.url, // Use original URL if available
           duration: `${duration}ms`,
           statusCode: res.statusCode
         })
       }
     })
   } else {
-    // Fallback to override res.end if ResponseManager not available
+    // Fallback: Only override res.end if ResponseManager not available
+    logger.warn('ResponseManager not available in requestTimer, using fallback logging', {
+      requestId: req.id || 'unknown'
+    })
+    
     const originalEnd = res.end
     res.end = function(chunk, encoding) {
       const duration = Date.now() - req.startTime
@@ -183,7 +199,8 @@ export const responseSizeLogger = (req, res, next) => {
     return originalWrite.call(this, chunk, encoding)
   }
   
-  // Use ResponseManager to log response size instead of overriding res.end
+  // CRITICAL FIX: Use ResponseManager to log response size instead of overriding res.end
+  // This prevents conflicts with the response state management
   if (req.responseManager) {
     req.responseManager.onEnd(() => {
       // Note: We can't access chunk here anymore, but we already tracked it via res.write override
@@ -192,14 +209,18 @@ export const responseSizeLogger = (req, res, next) => {
         logger.info('Large response', {
           requestId: req.id,
           method: req.method,
-          url: req.url,
+          url: req.originalUrl || req.url, // Use original URL if available
           responseSize: `${(responseSize / 1024 / 1024).toFixed(2)}MB`,
           statusCode: res.statusCode
         })
       }
     })
   } else {
-    // Fallback to override res.end if ResponseManager not available
+    // Fallback: Only override res.end if ResponseManager not available
+    logger.warn('ResponseManager not available in responseSizeLogger, using fallback logging', {
+      requestId: req.id || 'unknown'
+    })
+    
     const originalEnd = res.end
     res.end = function(chunk, encoding) {
       if (chunk) {
@@ -210,7 +231,7 @@ export const responseSizeLogger = (req, res, next) => {
         logger.info('Large response', {
           requestId: req.id,
           method: req.method,
-          url: req.url,
+          url: req.originalUrl || req.url, // Use original URL if available
           responseSize: `${(responseSize / 1024 / 1024).toFixed(2)}MB`,
           statusCode: res.statusCode
         })

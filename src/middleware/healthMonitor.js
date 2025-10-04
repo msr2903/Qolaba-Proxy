@@ -98,9 +98,22 @@ export const healthMonitor = (options = {}) => {
         checkAlerts(healthData, alertThresholds, requestId)
       })
     } else {
-      // Fallback to override res.end if ResponseManager not available
+      // CRITICAL FIX: Fallback to override res.end if ResponseManager not available
+      // But only if response hasn't already been ended
+      logger.warn('ResponseManager not available in health monitor, using fallback', {
+        requestId
+      })
+      
       const originalEnd = res.end
       res.end = function(chunk, encoding) {
+        // CRITICAL FIX: Check if response has already been ended
+        if (res.writableEnded || res.finished) {
+          logger.debug('Response already ended in health monitor fallback', {
+            requestId
+          })
+          return
+        }
+        
         const duration = Date.now() - startTime
         
         // Update health data

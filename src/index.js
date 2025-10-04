@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import morgan from 'morgan'
 import dotenv from 'dotenv'
 import { createServer } from 'http'
+import crypto from 'crypto'
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js'
@@ -45,13 +46,11 @@ app.use(handleJsonParsingError)
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Health monitoring
-app.use(healthMonitor())
-// Response manager - must be before other middleware that might use res.end
+// Response manager - must be BEFORE health monitor and other middleware that might use res.end
 app.use((req, res, next) => {
   // CRITICAL FIX: Generate request ID here since requestLogger hasn't run yet
   if (!req.id) {
-    req.id = require('uuid').v4()
+    req.id = crypto.randomUUID()
     logger.debug('Generated request ID in response manager middleware', {
       requestId: req.id,
       url: req.url,
@@ -62,6 +61,8 @@ app.use((req, res, next) => {
   req.responseManager = createResponseManager(res, req.id)
   next()
 })
+// Health monitoring - must be AFTER response manager
+app.use(healthMonitor())
 
 // Logging middleware
 if (config.logging.enabled) {

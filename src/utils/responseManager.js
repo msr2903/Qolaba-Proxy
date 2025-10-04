@@ -59,11 +59,17 @@ export class ResponseManager {
         return false
       }
       
-      if (self.isEnded || self.isDestroyed) {
+      // CRITICAL FIX: Check multiple end conditions to prevent corrupt responses
+      if (self.isEnded || self.isDestroyed || self.res.writableEnded || self.res.finished) {
         logger.warn('Attempted to write headers on ended or destroyed response', {
           requestId: self.requestId,
           isEnded: self.isEnded,
-          isDestroyed: self.isDestroyed
+          isDestroyed: self.isDestroyed,
+          writableEnded: self.res.writableEnded,
+          finished: self.res.finished,
+          // CRITICAL FIX: Add stack trace to identify what's calling writeHead
+          stack: new Error().stack?.split('\n').slice(2, 6).join('\n'),
+          args: args.slice(0, 2) // Log only status and headers for security
         })
         return false
       }
@@ -133,11 +139,14 @@ export class ResponseManager {
 
     // Override end
     this.res.end = function(chunk, encoding) {
-      if (self.isEnded) {
+      // CRITICAL FIX: Check multiple end conditions to prevent corrupt responses
+      if (self.isEnded || self.res.writableEnded || self.res.finished) {
         logger.debug('Response already ended, skipping', {
           requestId: self.requestId,
           headersSent: self.areHeadersSent(),
-          writable: self.res.writable
+          writable: self.res.writable,
+          writableEnded: self.res.writableEnded,
+          finished: self.res.finished
         })
         return
       }
@@ -151,15 +160,8 @@ export class ResponseManager {
         encoding: encoding || 'none'
       })
 
-      // Mark as ended before calling original end
-      self.isEnded = true
-      
-      // If streaming, mark streaming as completed when end is called
-      if (self.isStreaming && !self.streamingCompleted) {
-        self.streamingCompleted = true
-      }
-
-      // Execute all end callbacks AFTER marking as ended to prevent race conditions
+      // CRITICAL FIX: Execute callbacks BEFORE marking as ended to allow header setting
+      // Execute all end callbacks BEFORE marking as ended to prevent race conditions
       for (const callback of self.endCallbacks) {
         try {
           logResponseState(self.requestId, 'executing_end_callback', {
@@ -210,30 +212,83 @@ export class ResponseManager {
         }
       }
 
+      // Mark as ended AFTER executing callbacks to allow header setting
+      self.isEnded = true
+      
+      // If streaming, mark streaming as completed when end is called
+      if (self.isStreaming && !self.streamingCompleted) {
+        self.streamingCompleted = true
+      }
+
       // CRITICAL FIX: For streaming responses, don't pass parameters to end() if headers already sent
       try {
         logHeaderOperation(self.requestId, 'res.end_call', true)
         
+        // CRITICAL FIX: Check if response can still be written to before calling original end
+        if (self.res.writableEnded || self.res.finished) {
+          logger.warn('Response already ended by external system, skipping original end', {
+            requestId: self.requestId,
+            writableEnded: self.res.writableEnded,
+            finished: self.res.finished,
+            headersSent: self.headersSent
+          })
+          return
+        }
+        
         if (self.headersSent) {
           logResponseState(self.requestId, 'calling_original_end_no_params', {
             headersSent: true,
-            responseEnded: self.isEnded
+            responseEnded: self.isEnded,
+            writableEnded: self.res.writableEnded,
+            finished: self.res.finished
           })
-          self.originalEnd.call(this)
+          // CRITICAL FIX: Wrap original end in try-catch to prevent "Cannot set headers after they are sent" error
+          try {
+            self.originalEnd.call(this)
+          } catch (endError) {
+            // Check if it's a headers error and suppress it since response is already ended
+            if (endError.message.includes('headers') || endError.code === 'ERR_HTTP_HEADERS_SENT') {
+              logger.debug('Suppressed headers error during response end', {
+                requestId: self.requestId,
+                error: endError.message
+              })
+            } else {
+              // Re-throw non-headers errors
+              throw endError
+            }
+          }
         } else {
           logResponseState(self.requestId, 'calling_original_end_with_params', {
             headersSent: false,
             responseEnded: self.isEnded,
             hasChunk: !!chunk,
-            encoding: encoding || 'none'
+            encoding: encoding || 'none',
+            writableEnded: self.res.writableEnded,
+            finished: self.res.finished
           })
-          self.originalEnd.call(this, chunk, encoding)
+          // CRITICAL FIX: Wrap original end in try-catch to prevent "Cannot set headers after they are sent" error
+          try {
+            self.originalEnd.call(this, chunk, encoding)
+          } catch (endError) {
+            // Check if it's a headers error and suppress it since response is already ended
+            if (endError.message.includes('headers') || endError.code === 'ERR_HTTP_HEADERS_SENT') {
+              logger.debug('Suppressed headers error during response end', {
+                requestId: self.requestId,
+                error: endError.message
+              })
+            } else {
+              // Re-throw non-headers errors
+              throw endError
+            }
+          }
         }
         
         logResponseState(self.requestId, 'response_ended_successfully', {
           headersSent: self.areHeadersSent(),
           responseEnded: self.isEnded,
-          writable: self.res.writable
+          writable: self.res.writable,
+          writableEnded: self.res.writableEnded,
+          finished: self.res.finished
         })
       } catch (error) {
         logDetailedError(error, {
@@ -282,9 +337,39 @@ export class ResponseManager {
         }
         // CRITICAL FIX: For streaming responses, don't pass args to end() if headers already sent
         if (self.headersSent) {
-          return self.originalEnd.call(this)
+          // CRITICAL FIX: Wrap original end in try-catch to prevent "Cannot set headers after they are sent" error
+          try {
+            return self.originalEnd.call(this)
+          } catch (endError) {
+            // Check if it's a headers error and suppress it since response is already ended
+            if (endError.message.includes('headers') || endError.code === 'ERR_HTTP_HEADERS_SENT') {
+              logger.debug('Suppressed headers error during safe end', {
+                requestId: self.requestId,
+                error: endError.message
+              })
+              return false
+            } else {
+              // Re-throw non-headers errors
+              throw endError
+            }
+          }
         } else {
-          return self.originalEnd.apply(this, args)
+          // CRITICAL FIX: Wrap original end in try-catch to prevent "Cannot set headers after they are sent" error
+          try {
+            return self.originalEnd.apply(this, args)
+          } catch (endError) {
+            // Check if it's a headers error and suppress it since response is already ended
+            if (endError.message.includes('headers') || endError.code === 'ERR_HTTP_HEADERS_SENT') {
+              logger.debug('Suppressed headers error during safe end', {
+                requestId: self.requestId,
+                error: endError.message
+              })
+              return false
+            } else {
+              // Re-throw non-headers errors
+              throw endError
+            }
+          }
         }
       }
       return false
@@ -359,6 +444,21 @@ export class ResponseManager {
     // Add method to get request timeout reference
     this.res.getRequestTimeoutRef = function() {
       return self.requestTimeoutRef
+    }
+    
+    // CRITICAL FIX: Override res.json to work properly with response manager
+    const originalJson = this.res.json
+    this.res.json = function(obj) {
+      // Mark headers as sent since res.json will write them
+      self.headersSent = true
+      
+      // Call the original json method
+      const result = originalJson.call(this, obj)
+      
+      // Mark response as ended after calling original json
+      self.isEnded = true
+      
+      return result
     }
   }
 
@@ -639,7 +739,8 @@ export class ResponseManager {
    */
   safeEnd(data) {
     try {
-      if (this.res.canWrite()) {
+      // CRITICAL FIX: Check multiple end conditions to prevent corrupt responses
+      if (this.res.canWrite() && !this.res.writableEnded && !this.res.finished) {
         // CRITICAL FIX: For streaming responses, don't pass data to end() if headers already sent
         if (this.headersSent) {
           this.res.end()
@@ -648,6 +749,12 @@ export class ResponseManager {
         }
         return true
       }
+      logger.debug('Skipping safe end - response already ended', {
+        requestId: this.requestId,
+        canWrite: this.res.canWrite(),
+        writableEnded: this.res.writableEnded,
+        finished: this.res.finished
+      })
       return false
     } catch (error) {
       logger.error('Failed to end response', {
