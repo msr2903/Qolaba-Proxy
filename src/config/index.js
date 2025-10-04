@@ -133,12 +133,47 @@ export const config = {
       llm_model: 'x-ai/grok-3-mini-beta',
       provider: 'OpenRouterAI'
     },
+    'x-ai/grok-3-beta': {
+      llm: 'OpenRouterAI',
+      llm_model: 'x-ai/grok-3-beta',
+      provider: 'OpenRouterAI'
+    },
+    'x-ai/grok-3-mini-beta': {
+      llm: 'OpenRouterAI',
+      llm_model: 'x-ai/grok-3-mini-beta',
+      provider: 'OpenRouterAI'
+    },
     'perplexity-sonar-pro': {
       llm: 'OpenRouterAI',
       llm_model: 'perplexity/sonar-pro',
       provider: 'OpenRouterAI'
     },
+    'perplexity/sonar-pro': {
+      llm: 'OpenRouterAI',
+      llm_model: 'perplexity/sonar-pro',
+      provider: 'OpenRouterAI'
+    },
+    'perplexity/sonar-reasoning-pro': {
+      llm: 'OpenRouterAI',
+      llm_model: 'perplexity/sonar-reasoning-pro',
+      provider: 'OpenRouterAI'
+    },
+    'perplexity/sonar-reasoning': {
+      llm: 'OpenRouterAI',
+      llm_model: 'perplexity/sonar-reasoning',
+      provider: 'OpenRouterAI'
+    },
+    'perplexity/sonar-deep-research': {
+      llm: 'OpenRouterAI',
+      llm_model: 'perplexity/sonar-deep-research',
+      provider: 'OpenRouterAI'
+    },
     'deepseek-chat': {
+      llm: 'OpenRouterAI',
+      llm_model: 'deepseek/deepseek-chat',
+      provider: 'OpenRouterAI'
+    },
+    'deepseek/deepseek-chat': {
       llm: 'OpenRouterAI',
       llm_model: 'deepseek/deepseek-chat',
       provider: 'OpenRouterAI'
@@ -147,6 +182,33 @@ export const config = {
       llm: 'OpenRouterAI',
       llm_model: 'deepseek/deepseek-r1',
       provider: 'OpenRouterAI'
+    },
+    'deepseek/deepseek-r1': {
+      llm: 'OpenRouterAI',
+      llm_model: 'deepseek/deepseek-r1',
+      provider: 'OpenRouterAI'
+    },
+    
+    // Additional OpenAI models that Kilo Code might request
+    'o3-mini': {
+      llm: 'OpenAI',
+      llm_model: 'gpt-4.1-mini-2025-04-14',
+      provider: 'OpenAI'
+    },
+    'o1': {
+      llm: 'OpenAI',
+      llm_model: 'gpt-4.1-2025-04-14',
+      provider: 'OpenAI'
+    },
+    'o3': {
+      llm: 'OpenAI',
+      llm_model: 'gpt-4.1-2025-04-14',
+      provider: 'OpenAI'
+    },
+    'o4-mini-2025-04-16': {
+      llm: 'OpenAI',
+      llm_model: 'gpt-4.1-mini-2025-04-14',
+      provider: 'OpenAI'
     },
     
     // Default fallback

@@ -1,527 +1,192 @@
-# Qoloba Proxy - Troubleshooting Guide
+# Qoloba Proxy Troubleshooting Guide
 
-This guide helps diagnose and resolve common issues with the Qoloba OpenAI-Compatible Proxy server.
+## Common Issues and Solutions
 
-## 🔍 **Quick Diagnosis**
+### 1. Streaming Request Timeouts
 
-## 🖥️ **Windows Command Reference**
+**Problem**: Requests timing out after 30-90 seconds with "Streaming request timeout" errors.
 
-## 🔑 **Using the Test API Key**
+**Symptoms**:
+- `error: Qolaba API response error timeout of 90000ms exceeded`
+- `warn: Base timeout reached`
+- `error: Streaming request timeout`
 
-For testing purposes, you can use the built-in test API key:
+**Root Cause**: Timeout configuration mismatch between client and server.
 
-**Test API Key:** `your-test-api-key-here`
+**Solution**:
+```bash
+# PowerShell
+cd D:\AI\qoloba-proxy2; $env:REQUEST_TIMEOUT="120000"; $env:NODE_ENV="development"; npm start
 
-**Usage Examples (Windows CMD):**
-```cmd
-rem Using test API key for models list
-curl http://localhost:3000/v1/models -H "Authorization: Bearer your-test-api-key-here"
-
-rem Using test API key for chat completion
-curl -X POST http://localhost:3000/v1/chat/completions ^
-  -H "Content-Type: application/json" ^
-  -H "Authorization: Bearer your-test-api-key-here" ^
-  -d "{\"model\": \"gpt-4.1-mini-2025-04-14\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}"
+# Command Prompt
+cd /d D:\AI\qoloba-proxy2 && set REQUEST_TIMEOUT=120000 && set NODE_ENV=development && npm start
 ```
 
-**Usage Examples (PowerShell):**
-```powershell
-# Using test API key for models list
-curl http://localhost:3000/v1/models -H "Authorization: Bearer your-test-api-key-here"
+**Configuration Changes**:
+- Set `REQUEST_TIMEOUT=120000` (2 minutes) to accommodate upstream API latency
+- Ensure `NODE_ENV=development` for proper logging
 
-# Using test API key for chat completion
-curl -X POST http://localhost:3000/v1/chat/completions `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer your-test-api-key-here" `
-  -d '{"model": "gpt-4.1-mini-2025-04-14", "messages": [{"role": "user", "content": "Hello"}]}'
+### 2. Model Not Found Errors
+
+**Problem**: Kilo Code reports "Model not found" when selecting models from the `/v1/models` endpoint.
+
+**Symptoms**:
+- `warn: Model not found in mappings, using default`
+- Models listed in `/v1/models` but not mapped in configuration
+
+**Root Cause**: Model listing and model mapping are out of sync.
+
+**Solution**:
+The configuration has been updated to include all models returned by the `/v1/models` endpoint:
+
+**Fixed Models**:
+- OpenRouterAI models: `x-ai/grok-3-beta`, `perplexity/sonar-pro`, etc.
+- OpenAI models: `o3-mini`, `o1`, `o3`, `o4-mini-2025-04-16`
+- All models now have proper mappings to Qolaba API equivalents
+
+**Enhanced Logging**:
+- Model mapping issues now log available models for debugging
+- Total model count logged for verification
+
+### 3. "Cannot Set Headers After Sent" Errors
+
+**Problem**: Race conditions in streaming response handling.
+
+**Symptoms**:
+- `error: Cannot set headers after they are sent to the client`
+- `warn: End callback failed after headers sent, suppressing`
+
+**Root Cause**: Multiple systems trying to terminate the same response simultaneously.
+
+**Solution**:
+- Implemented coordinated termination system in `ResponseManager`
+- Added proper state tracking to prevent duplicate operations
+- Enhanced error handling for streaming responses
+
+### 4. Port Already in Use
+
+**Problem**: Server fails to start with "EADDRINUSE: address already in use".
+
+**Solution**:
+```bash
+# Kill existing Node.js processes
+taskkill /F /IM node.exe
+
+# Then restart with correct configuration
 ```
 
-**Note:** This test key is provided for development and testing only. For production use, replace it with your actual Qolaba API key.
+## Environment Variables
 
+### Required for Production
+- `PORT`: Server port (default: 3000)
+- `NODE_ENV`: Environment (development/production)
+- `REQUEST_TIMEOUT`: Request timeout in milliseconds (recommended: 120000)
 
-### Health Check Commands
+### Optional
+- `QOLABA_BASE_URL`: Qolaba API endpoint
+- `DEFAULT_MODEL`: Default model to use
+- `LOG_LEVEL`: Logging level (info/debug/error)
 
-**Windows CMD:**
-```cmd
-rem Basic health check
+## Model Mappings
+
+The proxy supports the following model categories:
+
+### OpenAI Models
+- `gpt-4.1-mini-2025-04-14` → `gpt-4.1-mini-2025-04-14`
+- `gpt-4.1-2025-04-14` → `gpt-4.1-2025-04-14`
+- `gpt-4o-mini` → `gpt-4o-mini`
+- `o3-mini` → `gpt-4.1-mini-2025-04-14` (mapped)
+- `o1` → `gpt-4.1-2025-04-14` (mapped)
+
+### ClaudeAI Models
+- `claude-3-7-sonnet-latest` → `claude-3-7-sonnet-latest`
+- `claude-opus-4-20250514` → `claude-opus-4-20250514`
+
+### GeminiAI Models
+- `gemini-2.5-pro` → `gemini-2.5-pro`
+- `gemini-2.5-flash` → `gemini-2.5-flash`
+
+### OpenRouterAI Models
+- `grok-3-beta` → `x-ai/grok-3-beta`
+- `x-ai/grok-3-beta` → `x-ai/grok-3-beta`
+- `perplexity/sonar-pro` → `perplexity/sonar-pro`
+- `deepseek/deepseek-chat` → `deepseek/deepseek-chat`
+
+## Debugging
+
+### Enable Verbose Logging
+```bash
+# PowerShell
+$env:LOG_LEVEL="debug"; $env:ENABLE_VERBOSE_LOGGING="true"; npm start
+
+# Command Prompt
+set LOG_LEVEL=debug && set ENABLE_VERBOSE_LOGGING=true && npm start
+```
+
+### Check Logs
+- Application logs: `logs/combined.log`
+- Error logs: `logs/error.log`
+- Real-time logs: Console output
+
+### Test Endpoints
+```bash
+# Health check
 curl http://localhost:3000/health
 
-rem Detailed health with metrics
-curl http://localhost:3000/health/detailed
-
-rem System readiness
-curl http://localhost:3000/health/ready
-
-rem Liveness probe
-curl http://localhost:3000/health/live
-```
-
-**Windows PowerShell:**
-```powershell
-# Basic health check
-curl http://localhost:3000/health
-
-# Detailed health with metrics
-curl http://localhost:3000/health/detailed
-
-# System readiness
-curl http://localhost:3000/health/ready
-
-# Liveness probe
-curl http://localhost:3000/health/live
-```
-
-### API Testing Commands
-
-**Windows CMD:**
-```cmd
-rem Models list
-curl http://localhost:3000/v1/models -H "Authorization: Bearer YOUR_API_KEY"
-
-rem Chat completion (non-streaming)
-curl -X POST http://localhost:3000/v1/chat/completions ^
-  -H "Content-Type: application/json" ^
-  -H "Authorization: Bearer YOUR_API_KEY" ^
-  -d "{\"model\": \"gpt-4o-mini\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}"
-
-rem Chat completion (streaming)
-curl -X POST http://localhost:3000/v1/chat/completions ^
-  -H "Content-Type: application/json" ^
-  -H "Authorization: Bearer YOUR_API_KEY" ^
-  -d "{\"model\": \"gpt-4o-mini\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}], \"stream\": true}"
-```
-
-**Windows PowerShell:**
-```powershell
 # Models list
-curl http://localhost:3000/v1/models -H "Authorization: Bearer YOUR_API_KEY"
-
-# Chat completion (non-streaming)
-curl -X POST http://localhost:3000/v1/chat/completions `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer YOUR_API_KEY" `
-  -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}]}'
+curl http://localhost:3000/v1/models
 
 # Chat completion (streaming)
-curl -X POST http://localhost:3000/v1/chat/completions `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer YOUR_API_KEY" `
-  -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
-```
-
-### System Diagnostics
-
-**Windows CMD:**
-```cmd
-rem Check if server is running
-tasklist | findstr node
-
-rem Check port usage
-netstat -an | findstr :3000
-
-rem Check memory usage
-curl http://localhost:3000/health/detailed
-
-rem Get recent logs
-type logs\app.log | more
-
-rem Restart server
-npm start
-```
-
-**Windows PowerShell:**
-```powershell
-# Check if server is running
-Get-Process | Where-Object {$_.ProcessName -like "*node*"}
-
-# Check port usage
-netstat -an | Select-String ":3000"
-
-# Check memory usage
-curl http://localhost:3000/health/detailed | ConvertFrom-Json | Select-Object -ExpandProperty memory
-
-# Get recent logs
-Get-Content "logs\app.log" | Select-Object -Last 100
-
-# Restart server
-npm start
-```
-
-
-### Check Server Status
-```bash
-# Basic health check
-curl http://localhost:3000/health
-
-# Detailed health with metrics
-curl http://localhost:3000/health/detailed
-
-# System readiness
-curl http://localhost:3000/health/ready
-```
-
-### Common Error Patterns
-
-#### 1. **Timeout Errors**
-**Symptoms:**
-- `Request timeout after 30000ms`
-- `Streaming error occurred`
-- `Request completed near timeout`
-
-**Solutions:**
-- Check if streaming requests are properly handled
-- Verify timeout configuration in `.env`
-- Monitor network connectivity to Qolaba API
-- Check for client disconnect patterns
-
-**Configuration:**
-```bash
-# Increase timeouts if needed
-REQUEST_TIMEOUT=120000  # 2 minutes
-CONNECTION_TIMEOUT=60000 # 1 minute
-```
-
-#### 2. **JSON Parsing Errors**
-**Symptoms:**
-- `Invalid JSON format in request body`
-- `Unexpected token ''', "'model:" is not valid JSON`
-- `Request body cannot be empty`
-
-**Solutions:**
-- Validate JSON before sending requests
-- Check for malformed JSON syntax
-- Ensure proper content-type headers
-- Use JSON linters for request validation
-
-**Example Valid Request:**
-```bash
 curl -X POST http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "model": "gpt-4o-mini",
-    "messages": [{"role": "user", "content": "Hello"}],
-    "stream": true
-  }'
+  -d '{"model":"gpt-4.1-mini-2025-04-14","messages":[{"role":"user","content":"Hello"}],"stream":true}'
 ```
 
-#### 3. **Client Disconnect Issues**
-**Symptoms:**
-- `Client disconnected during streaming`
-- `Request aborted by client`
-- Incomplete streaming responses
+## Performance Tuning
 
-**Solutions:**
-- Check client-side timeout settings
-- Verify network stability
-- Monitor client disconnect rates
-- Implement retry logic on client side
+### Timeout Settings
+- `REQUEST_TIMEOUT`: 120000ms (2 minutes) - Recommended for production
+- `CONNECTION_TIMEOUT`: 30000ms (30 seconds) - Connection establishment
+- `SOCKET_TIMEOUT`: 60000ms (1 minute) - Socket inactivity
 
-#### 4. **API Connection Issues**
-**Symptoms:**
-- `ECONNREFUSED`
-- `ECONNRESET`
-- `ETIMEDOUT`
-- `Qolaba API error`
+### Concurrency
+- `CONCURRENT_REQUESTS_LIMIT`: 100 - Maximum concurrent requests
+- `MAX_SOCKETS`: 100 - Maximum socket connections
 
-**Solutions:**
-- Verify Qolaba API endpoint accessibility
-- Check API key validity
-- Monitor rate limiting
-- Test network connectivity
+## Monitoring
 
-## 📊 **Monitoring and Logs**
+### Health Monitoring
+- Endpoint: `/health`
+- Metrics: Response times, error rates, active connections
+- Auto-reset: Health data resets on server restart
 
-### Enable Debug Logging
-```bash
-# Set environment variables
-LOG_LEVEL=debug
-ENABLE_VERBOSE_LOGGING=true
-npm start
-```
+### Performance Metrics
+- Average response time tracking
+- High response time alerts (>30 seconds)
+- Request success/failure rates
 
-### Key Log Patterns to Watch
+## Security
 
-#### Successful Requests
-```
-info: Request started {requestId: "...", method: "POST", url: "/v1/chat/completions"}
-info: Chat completion request received {requestId: "...", stream: true}
-info: Streaming started {requestId: "..."}
-info: Streaming completed successfully {requestId: "..."}
-info: Chat completion completed successfully {requestId: "..."}
-```
+### API Key Handling
+- Supports passthrough mode (forwards client API keys)
+- Supports override mode (uses server-side API key)
+- API keys are redacted in logs
 
-#### Problem Patterns
-```
-warn: Request timeout reached {requestId: "...", duration: "30015ms"}
-info: Client disconnected during streaming {requestId: "..."}
-error: Streaming error occurred {requestId: "..."}
-error: JSON parsing error {requestId: "..."}
-```
+### CORS Configuration
+- Default: Allow all origins (`*`)
+- Configurable via `CORS_ORIGIN` environment variable
 
-### Health Metrics
-Monitor these metrics via `/health/detailed`:
-- Error rate (should be < 10%)
-- Average response time (should be < 30s)
-- Circuit breaker state (should be CLOSED)
-- Streaming disconnect rate (should be < 30%)
+## Support
 
-## 🔧 **Configuration Fixes**
+If issues persist after applying these solutions:
 
-### Timeout Optimization
-```bash
-# .env file optimizations
-REQUEST_TIMEOUT=120000          # 2 minutes
-CONNECTION_TIMEOUT=60000        # 1 minute
-SOCKET_TIMEOUT=120000           # 2 minutes
-KEEP_ALIVE_TIMEOUT=65000        # 65 seconds
-```
+1. Check the logs for specific error messages
+2. Verify environment variables are set correctly
+3. Ensure the Qolaba API is accessible from your network
+4. Test with a simple model first (e.g., `gpt-4.1-mini-2025-04-14`)
 
-### Connection Pool Settings
-```bash
-# Improve connection handling
-MAX_SOCKETS=50
-MAX_FREE_SOCKETS=10
-KEEP_ALIVE=true
-KEEP_ALIVE_MSECS=30000
-```
-
-### Rate Limiting
-```bash
-# Adjust rate limits if needed
-CONCURRENT_REQUESTS_LIMIT=100
-```
-
-## 🚨 **Alert Scenarios**
-
-### High Error Rate
-- **Trigger**: Error rate > 10%
-- **Action**: Check logs for pattern, verify API connectivity
-- **Check**: `/health/detailed` for error details
-
-### Slow Response Times
-- **Trigger**: Average response time > 30 seconds
-- **Action**: Check Qolaba API performance, network latency
-- **Check**: Response time logs
-
-### Circuit Breaker Open
-- **Trigger**: Multiple consecutive failures
-- **Action**: Check API connectivity, restart service if needed
-- **Check**: Circuit breaker state in health endpoint
-
-### High Streaming Disconnect Rate
-- **Trigger**: Disconnect rate > 30%
-- **Action**: Check client-side implementations, network stability
-- **Check**: Streaming logs and metrics
-
-## 🛠️ **Step-by-Step Troubleshooting**
-
-### 1. **Server Not Responding**
-```bash
-# Check if server is running
-ps aux | grep node
-
-# Check port usage
-netstat -tlnp | grep :3000
-
-# Restart server
-npm start
-```
-
-### 2. **API Connection Issues**
-```bash
-# Test Qolaba API directly
-curl -H "Authorization: Bearer YOUR_API_KEY" \
-  https://qolaba-server-b2b.up.railway.app/api/v1/studio/get-status
-
-# Check network connectivity
-ping qolaba-server-b2b.up.railway.app
-```
-
-### 3. **Streaming Issues**
-```bash
-# Test streaming endpoint
-curl -X POST http://localhost:3000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{
-    "model": "gpt-4o-mini",
-    "messages": [{"role": "user", "content": "Test"}],
-    "stream": true
-  }' --no-buffer
-```
-
-### 4. **Memory Issues**
-```bash
-# Check memory usage
-curl http://localhost:3000/health/detailed | jq '.memory'
-
-# Monitor process
-top -p $(pgrep -f "node.*index.js")
-```
-
-## 📈 **Performance Tuning**
-
-### For High Traffic
-- Increase `CONCURRENT_REQUESTS_LIMIT`
-- Optimize connection pool settings
-- Consider load balancing multiple instances
-- Monitor memory usage
-
-### For Large Requests
-- Increase `MAX_RESPONSE_SIZE`
-- Adjust timeout settings
-- Monitor payload sizes
-- Consider request size limits
-
-### For Better Reliability
-- Enable retry logic
-- Configure circuit breaker
-- Set up monitoring alerts
-- Implement health checks
-
-## 🔍 **Debug Mode**
-
-Enable comprehensive debugging:
-```bash
-# Environment variables
-LOG_LEVEL=debug
-ENABLE_VERBOSE_LOGGING=true
-ENABLE_DEBUG_ENDPOINTS=true
-REQUEST_TIMEOUT=300000
-
-# Start with debug output
-DEBUG=* npm start
-```
-
-## 🆘 **Getting Help**
-
-### Gather Information
-1. Server logs (last 100 lines)
-2. Health check output
-3. Error patterns
-4. Configuration used
-5. Request that caused the issue
-
-### Useful Commands
-```bash
-# Get recent logs
-tail -100 logs/app.log
-
-# Health check
-curl -s http://localhost:3000/health/detailed | jq .
-
-# Test API
-curl -X POST http://localhost:3000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_API_KEY" \
-  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"test"}],"stream":false}'
-```
-
-### Contact Support
-Include the following information:
-- Server version and configuration
+For additional support, provide:
 - Full error logs
-- Steps to reproduce
-- Expected vs actual behavior
-
----
-
-## ✅ **Health Check Checklist**
-
-Before going to production, verify:
-
-- [ ] Server starts without errors
-- [ ] Health endpoints respond correctly
-- [ ] Basic chat completion works
-- [ ] Streaming responses work
-- [ ] Error handling works
-- [ ] Rate limiting is functional
-- [ ] Circuit breaker works
-- [ ] Logs are informative
-- [ ] Monitoring alerts are configured
-- [ ] Memory usage is stable
-- [ ] Timeouts are reasonable
-- [ ] Client disconnect handling works
-- [ ] All tests pass (166 tests across 7 test files)
-
-## 🧪 **Test Troubleshooting**
-
-### Running Tests
-
-```bash
-# Run all tests
-npm test
-
-# Run tests with coverage
-npm run test:coverage
-
-# Run tests in watch mode
-npm run test:watch
-```
-
-### Common Test Issues
-
-#### 1. Port Conflicts During Tests
-
-**Symptoms:**
-- `EADDRINUSE: address already in use 0.0.0.0:3000`
-- Tests failing to start server
-
-**Solutions:**
-- Ensure the server is not running before starting tests
-- Verify that `NODE_ENV=test` is set in the test script
-- Check that server startup is properly prevented in test environment
-
-#### 2. Service Name Mismatches
-
-**Symptoms:**
-- Test assertions failing with service name errors
-- Expected "qoloba-proxy" but got "qolaba-proxy"
-
-**Solutions:**
-- Check that the service name is "qoloba-proxy" in the test assertions
-- Verify that the service name is consistent across all test files
-- Ensure that the service name is correctly set in the configuration
-
-#### 3. Test Assertion Errors
-
-**Symptoms:**
-- Tests failing with assertion errors
-- Expected values not matching actual values
-
-**Solutions:**
-- Check that the assertions are using the correct syntax
-- Verify that the expected values match the actual values
-- Ensure that the test assertions are specific and not too broad
-
-### Test Results Interpretation
-
-#### Success Indicators
-
-- ✅ **PASSED** - Test completed successfully
-- **Test Suites: 7 passed, 7 total** - All test suites passed
-- **Tests: 166 passed, 166 total** - All tests passed
-- **Snapshots: 0 total** - No snapshot tests
-- **Time: ~2s** - Tests completed quickly
-
-#### Failure Indicators
-
-- ❌ **FAILED** - Test failed
-- **Error messages** - Look for specific error messages in the test output
-- **Port conflicts** - Ensure the server is not running before starting tests
-- **Service name mismatches** - Check that service name is "qoloba-proxy" in tests
-
-### Recent Test Fixes
-
-The following issues were recently resolved:
-- Fixed port conflicts during test execution by preventing server startup in test environment
-- Corrected service name assertions from "qolaba-proxy" to "qoloba-proxy"
-- Improved test assertions to be more specific and reliable
-- Implemented test-specific handler functions for better test isolation
-
----
-
-**Last Updated**: October 2025  
-**Version**: 1.0.0  
-**Maintainer**: Qoloba Proxy Team
+- Environment configuration
+- Request payload that caused the issue
+- Server version and Node.js version

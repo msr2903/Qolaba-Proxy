@@ -137,7 +137,9 @@ function getModelConfig(modelName) {
   if (!mappedModel) {
     logger.warn('Model not found in mappings, using default', {
       requestedModel: modelName,
-      defaultModel: config.modelMappings.default.llm_model
+      defaultModel: config.modelMappings.default.llm_model,
+      availableModels: Object.keys(config.modelMappings).slice(0, 10), // Log first 10 for debugging
+      totalAvailableModels: Object.keys(config.modelMappings).length
     })
     return config.modelMappings.default
   }

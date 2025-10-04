@@ -443,6 +443,12 @@ The proxy tracks:
 
 ## 🔧 Troubleshooting
 
+For comprehensive troubleshooting guides, see our detailed documentation:
+
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Complete troubleshooting guide with solutions for common issues
+- **[TIMEOUT_ERROR_HANDLING.md](TIMEOUT_ERROR_HANDLING.md)** - Specific timeout error handling documentation
+- **[STREAMING_FIX_IMPLEMENTATION_PLAN.md](streaming-fix-implementation-plan.md)** - Streaming fixes and implementation details
+
 ### Common Issues
 
 1. **"API key not found"**
@@ -460,6 +466,13 @@ The proxy tracks:
 4. **"Model not found"**
    - Check the model mapping in `src/config/index.js`
    - Use the model names returned by `/v1/models`
+
+5. **"Streaming request timeout"**
+   - See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#1-streaming-request-timeouts) for timeout configuration
+   - Set `REQUEST_TIMEOUT=120000` for proper timeout handling
+
+6. **"Cannot set headers after they are sent"**
+   - See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#3-cannot-set-headers-after-sent-errors) for race condition fixes
 
 ### Debug Mode
 
@@ -513,6 +526,21 @@ Set `"stream": true` in your request to enable streaming responses. The proxy wi
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 📚 Documentation
+
+This project includes comprehensive documentation to help you get started and troubleshoot issues:
+
+### Core Documentation
+- **[README.md](README.md)** - This file, main project documentation
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Complete troubleshooting guide with solutions for common issues
+- **[TIMEOUT_ERROR_HANDLING.md](TIMEOUT_ERROR_HANDLING.md)** - Specific timeout error handling documentation
+- **[STREAMING_FIX_IMPLEMENTATION_PLAN.md](streaming-fix-implementation-plan.md)** - Streaming fixes and implementation details
+
+### Additional Documentation
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
+- **[ai.md](ai.md)** - AI knowledge base and testing guidelines
+- **[hanging-issues-analysis.md](hanging-issues-analysis.md)** - Analysis of hanging issues and solutions
 
 ## 🔗 Links
 
