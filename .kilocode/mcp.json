@@ -10,7 +10,8 @@
         "DEFAULT_MINIMUM_TOKENS": ""
       },
       "alwaysAllow": [
-        "resolve-library-id"
+        "resolve-library-id",
+        "get-library-docs"
       ]
     },
     "filesystem": {
