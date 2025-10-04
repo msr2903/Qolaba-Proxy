@@ -1025,34 +1025,81 @@ export async function handleTimeoutError(responseManager, model, reason = 'timeo
                   reason === 'inactivity_timeout' ? 'Request timeout due to inactivity' :
                   'Request timeout'
 
+  // DIAGNOSTIC: Enhanced logging for timeout race condition analysis
   logger.warn('Handling timeout error with hybrid approach', {
     requestId: responseManager.requestId,
     reason,
     headersSent: responseManager.areHeadersSent(),
     canWriteHeaders: responseManager.res.canWriteHeaders(),
-    canWrite: responseManager.res.canWrite()
+    canWrite: responseManager.res.canWrite(),
+    // DIAGNOSTIC: Track response state in detail
+    responseState: {
+      isEnded: responseManager.hasEnded(),
+      isDestroyed: responseManager.isDestroyed,
+      isStreaming: responseManager.isStreaming,
+      streamingCompleted: responseManager.streamingCompleted,
+      writable: responseManager.res.writable,
+      writableEnded: responseManager.res.writableEnded,
+      finished: responseManager.res.finished
+    },
+    // DIAGNOSTIC: Track timing
+    timestamp: Date.now()
   })
 
   // Try streaming error first if headers already sent
   if (responseManager.areHeadersSent() && responseManager.res.canWrite()) {
+    logger.debug('Attempting to send timeout error as streaming chunk', {
+      requestId: responseManager.requestId,
+      reason,
+      model
+    })
     const streamingSuccess = sendTimeoutErrorStreaming(responseManager, model, message)
     if (streamingSuccess) {
+      logger.info('Successfully sent timeout error as streaming chunk', {
+        requestId: responseManager.requestId,
+        reason
+      })
       return true
+    } else {
+      logger.warn('Failed to send timeout error as streaming chunk', {
+        requestId: responseManager.requestId,
+        reason
+      })
     }
   }
 
   // Fallback to HTTP error if streaming failed or headers not sent
   if (responseManager.res.canWriteHeaders()) {
+    logger.debug('Attempting to send timeout error as HTTP response', {
+      requestId: responseManager.requestId,
+      reason
+    })
     const httpSuccess = sendTimeoutErrorHttp(responseManager.res, responseManager.requestId, message)
     if (httpSuccess) {
+      logger.info('Successfully sent timeout error as HTTP response', {
+        requestId: responseManager.requestId,
+        reason
+      })
       return true
+    } else {
+      logger.warn('Failed to send timeout error as HTTP response', {
+        requestId: responseManager.requestId,
+        reason
+      })
     }
   }
 
   // If both methods failed, log and proceed with termination
   logger.warn('Both streaming and HTTP timeout error delivery failed, proceeding with termination', {
     requestId: responseManager.requestId,
-    reason
+    reason,
+    finalResponseState: {
+      headersSent: responseManager.areHeadersSent(),
+      canWriteHeaders: responseManager.res.canWriteHeaders(),
+      canWrite: responseManager.res.canWrite(),
+      isEnded: responseManager.hasEnded(),
+      isDestroyed: responseManager.isDestroyed
+    }
   })
   return false
 }

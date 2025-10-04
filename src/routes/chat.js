@@ -135,14 +135,33 @@ function getModelConfig(modelName) {
   const mappedModel = config.modelMappings[modelName]
   
   if (!mappedModel) {
+    // ENHANCED DIAGNOSTIC: Log detailed model mapping analysis
     logger.warn('Model not found in mappings, using default', {
       requestedModel: modelName,
       defaultModel: config.modelMappings.default.llm_model,
       availableModels: Object.keys(config.modelMappings).slice(0, 10), // Log first 10 for debugging
-      totalAvailableModels: Object.keys(config.modelMappings).length
+      totalAvailableModels: Object.keys(config.modelMappings).length,
+      // DIAGNOSTIC: Check for similar model names
+      similarModels: Object.keys(config.modelMappings).filter(key =>
+        key.toLowerCase().includes(modelName.toLowerCase().split('-')[0]) ||
+        modelName.toLowerCase().includes(key.toLowerCase().split('-')[0])
+      ),
+      // DIAGNOSTIC: Check if this is a gemini model variant
+      isGeminiVariant: modelName.toLowerCase().includes('gemini'),
+      geminiModelsAvailable: Object.keys(config.modelMappings).filter(key =>
+        key.toLowerCase().includes('gemini')
+      )
     })
     return config.modelMappings.default
   }
+
+  // DIAGNOSTIC: Log successful model mapping
+  logger.debug('Model mapped successfully', {
+    requestedModel: modelName,
+    mappedLLM: mappedModel.llm,
+    mappedLLMModel: mappedModel.llm_model,
+    provider: mappedModel.provider
+  })
 
   return mappedModel
 }

@@ -121,6 +121,16 @@ export const config = {
       llm_model: 'gemini-2.5-flash',
       provider: 'GeminiAI'
     },
+    'gemini-2.5-flash': {
+      llm: 'GeminiAI',
+      llm_model: 'gemini-2.5-flash',
+      provider: 'GeminiAI'
+    },
+    'gemini-2.5-pro': {
+      llm: 'GeminiAI',
+      llm_model: 'gemini-2.5-pro',
+      provider: 'GeminiAI'
+    },
     
     // OpenRouterAI models
     'grok-3-beta': {

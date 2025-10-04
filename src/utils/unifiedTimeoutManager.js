@@ -228,14 +228,38 @@ export class UnifiedTimeoutManager {
       name: 'base_timeout',
       delay: this.options.defaultTimeout,
       callback: async () => {
+        // DIAGNOSTIC: Enhanced logging for timeout race condition analysis
         logger.warn('Base timeout reached', {
           requestId: this.requestId,
-          requestType
+          requestType,
+          elapsed: Date.now() - (this.createdAt || Date.now()),
+          lastActivity: this.lastActivity,
+          inactivityTime: Date.now() - this.lastActivity,
+          // DIAGNOSTIC: Check if streaming error handler is available
+          hasStreamingErrorHandler: !!this._streamingErrorHandler,
+          // DIAGNOSTIC: Track timeout state
+          isTerminated: this.isTerminated,
+          activeTimeouts: this.timeouts.size
         })
         
         // ENHANCEMENT: Handle streaming timeout errors with proper error messages
         if (requestType === 'streaming' && this._streamingErrorHandler) {
-          await this._streamingErrorHandler('base_timeout')
+          try {
+            logger.debug('Calling streaming error handler for base timeout', {
+              requestId: this.requestId,
+              handlerAvailable: !!this._streamingErrorHandler
+            })
+            await this._streamingErrorHandler('base_timeout')
+            logger.debug('Streaming error handler completed successfully', {
+              requestId: this.requestId
+            })
+          } catch (error) {
+            logger.error('Streaming error handler failed during base timeout', {
+              requestId: this.requestId,
+              error: error.message,
+              stack: error.stack
+            })
+          }
         }
         
         await this.terminate('base_timeout')
