@@ -1,4 +1,4 @@
-import { logger } from '../services/logger.js'
+import { logger, logDetailedError, logResponseState, logHeaderOperation } from '../services/logger.js'
 import { TimeoutError } from './errorHandler.js'
 
 /**
@@ -47,6 +47,23 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
             return // Don't proceed with timeout response
           }
         } catch (error) {
+          logDetailedError(error, {
+            requestId,
+            method: 'cancel_timeouts_responsestate',
+            url: 'request_timeout_middleware',
+            responseState: {
+              headersSent: res.headersSent,
+              ended: res.writableEnded,
+              writable: res.writable
+            },
+            additionalInfo: {
+              timeoutDuration: `${duration}ms`,
+              timeoutMs,
+              isStreamingRequest,
+              operation: 'cancel_all_timeouts'
+            }
+          })
+          
           logger.warn('Failed to cancel timeouts via ResponseState', {
             requestId,
             error: error.message
@@ -67,6 +84,24 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
             }
           })
         } catch (error) {
+          logDetailedError(error, {
+            requestId,
+            method: 'send_timeout_response',
+            url: 'request_timeout_middleware',
+            responseState: {
+              headersSent: res.headersSent,
+              ended: res.writableEnded,
+              writable: res.writable
+            },
+            additionalInfo: {
+              timeoutDuration: `${duration}ms`,
+              timeoutMs,
+              isStreamingRequest,
+              statusCode: 408,
+              errorType: 'timeout_response'
+            }
+          })
+          
           logger.warn('Failed to send timeout response', {
             requestId,
             error: error.message
@@ -90,6 +125,24 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
             res.socket.destroy()
           }
         } catch (error) {
+          logDetailedError(error, {
+            requestId,
+            method: 'destroy_socket_timeout',
+            url: 'request_timeout_middleware',
+            responseState: {
+              headersSent: res.headersSent,
+              ended: res.writableEnded,
+              writable: res.writable
+            },
+            additionalInfo: {
+              timeoutDuration: `${duration}ms`,
+              timeoutMs,
+              isStreamingRequest,
+              socketDestroyed: res.socket ? !res.socket.destroyed : 'N/A',
+              operation: 'socket_destruction'
+            }
+          })
+          
           logger.warn('Failed to destroy socket on timeout', {
             requestId,
             error: error.message
@@ -118,6 +171,22 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
           })
         }
       } catch (error) {
+        logDetailedError(error, {
+          requestId,
+          method: 'register_timeout_responsestate',
+          url: 'request_timeout_middleware',
+          responseState: {
+            headersSent: res.headersSent,
+            ended: res.writableEnded,
+            writable: res.writable
+          },
+          additionalInfo: {
+            timeoutMs,
+            isStreamingRequest,
+            operation: 'register_timeout_callback'
+          }
+        })
+        
         logger.warn('Failed to register timeout with ResponseState', {
           requestId,
           error: error.message
@@ -131,6 +200,22 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
       try {
         res.setRequestTimeoutRef(timeout)
       } catch (error) {
+        logDetailedError(error, {
+          requestId,
+          method: 'set_timeout_reference',
+          url: 'request_timeout_middleware',
+          responseState: {
+            headersSent: res.headersSent,
+            ended: res.writableEnded,
+            writable: res.writable
+          },
+          additionalInfo: {
+            timeoutMs,
+            isStreamingRequest,
+            operation: 'set_timeout_ref'
+          }
+        })
+        
         logger.warn('Failed to set timeout reference in ResponseState', {
           requestId,
           error: error.message
@@ -159,6 +244,23 @@ export const requestTimeout = (defaultTimeoutMs = 30000) => {
         try {
           res.cancelAllTimeouts('request_completed')
         } catch (error) {
+          logDetailedError(error, {
+            requestId,
+            method: 'cleanup_cancel_timeouts',
+            url: 'request_timeout_middleware',
+            responseState: {
+              headersSent: res.headersSent,
+              ended: res.writableEnded,
+              writable: res.writable
+            },
+            additionalInfo: {
+              duration: `${duration}ms`,
+              timeoutMs,
+              isStreamingRequest,
+              operation: 'cleanup_cancel_timeouts'
+            }
+          })
+          
           logger.warn('Failed to cancel timeouts during cleanup', {
             requestId,
             error: error.message

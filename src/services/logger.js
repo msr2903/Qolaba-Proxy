@@ -1,6 +1,8 @@
 import winston from 'winston'
 import { config } from '../config/index.js'
 import { safeStringify, safePayloadSize, sanitizeForLogging } from '../utils/serialization.js'
+import fs from 'fs'
+import path from 'path'
 
 // Rate limiting for log messages to prevent console flooding
 const logRateLimiter = new Map()
@@ -114,6 +116,91 @@ export const cleanupRateLimiter = () => {
 
 // Schedule periodic cleanup
 setInterval(cleanupRateLimiter, 300000) // Every 5 minutes
+
+// Ensure logs directory exists
+const logsDir = path.join(process.cwd(), 'logs')
+if (!fs.existsSync(logsDir)) {
+  try {
+    fs.mkdirSync(logsDir, { recursive: true })
+  } catch (error) {
+    console.error('Failed to create logs directory:', error.message)
+  }
+}
+
+// Enhanced error log format with detailed stack traces and line numbers
+const errorLogFormat = winston.format.combine(
+  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
+  winston.format.errors({ stack: true }),
+  winston.format.json(),
+  winston.format.printf(({ level, message, timestamp, ...meta }) => {
+    let log = `${timestamp} [${level.toUpperCase()}]: ${message}`
+    
+    // Add detailed error information
+    if (meta.error) {
+      log += `\nERROR DETAILS:`
+      log += `\n  Message: ${meta.error.message || meta.error}`
+      log += `\n  Stack: ${meta.error.stack || 'No stack trace available'}`
+      
+      if (meta.error.code) {
+        log += `\n  Code: ${meta.error.code}`
+      }
+      
+      if (meta.error.statusCode) {
+        log += `\n  Status Code: ${meta.error.statusCode}`
+      }
+    }
+    
+    // Add request context
+    if (meta.requestId) {
+      log += `\nREQUEST CONTEXT:`
+      log += `\n  Request ID: ${meta.requestId}`
+      log += `\n  Method: ${meta.method || 'Unknown'}`
+      log += `\n  URL: ${meta.url || 'Unknown'}`
+      log += `\n  IP: ${meta.ip || 'Unknown'}`
+    }
+    
+    // Add response state information
+    if (meta.responseState) {
+      log += `\nRESPONSE STATE:`
+      log += `\n  Headers Sent: ${meta.responseState.headersSent || meta.responseState.isHeadersSent || 'Unknown'}`
+      log += `\n  Response Ended: ${meta.responseState.ended || meta.responseState.isEnded || 'Unknown'}`
+      log += `\n  Writable: ${meta.responseState.writable || 'Unknown'}`
+    }
+    
+    // Add call stack information for debugging
+    if (meta.callStack) {
+      log += `\nCALL STACK:`
+      log += `\n${meta.callStack}`
+    }
+    
+    // Add execution context
+    if (meta.context) {
+      log += `\nEXECUTION CONTEXT:`
+      log += `\n  File: ${meta.context.file || 'Unknown'}`
+      log += `\n  Function: ${meta.context.function || 'Unknown'}`
+      log += `\n  Line: ${meta.context.line || 'Unknown'}`
+      log += `\n  Column: ${meta.context.column || 'Unknown'}`
+    }
+    
+    // Add additional metadata
+    const otherMeta = { ...meta }
+    delete otherMeta.error
+    delete otherMeta.requestId
+    delete otherMeta.method
+    delete otherMeta.url
+    delete otherMeta.ip
+    delete otherMeta.responseState
+    delete otherMeta.callStack
+    delete otherMeta.context
+    
+    if (Object.keys(otherMeta).length > 0) {
+      const sanitizedOther = sanitizeForLogging(otherMeta, { maxDepth: 3, maxStringLength: 200 })
+      log += `\nADDITIONAL CONTEXT: ${JSON.stringify(sanitizedOther, null, 2)}`
+    }
+    
+    return log
+  })
+)
 
 // Custom log format with rate limiting
 const logFormat = winston.format.combine(
@@ -264,14 +351,22 @@ export const logger = winston.createLogger({
     
     // File transports (only in production or when verbose logging is enabled)
     ...(config.server.nodeEnv === 'production' || config.logging.enabled === true ? [
-      new winston.transports.File({ 
-        filename: 'logs/error.log', 
+      new winston.transports.File({
+        filename: 'logs/error.log',
         level: 'error',
         maxsize: 5242880, // 5MB
         maxFiles: 5,
         format: logFormat
       }),
-      new winston.transports.File({ 
+      // Enhanced error log with detailed stack traces
+      new winston.transports.File({
+        filename: 'errors.log',
+        level: 'error',
+        maxsize: 10485760, // 10MB
+        maxFiles: 10,
+        format: errorLogFormat
+      }),
+      new winston.transports.File({
         filename: 'logs/combined.log',
         maxsize: 5242880, // 5MB
         maxFiles: 5,
@@ -279,7 +374,7 @@ export const logger = winston.createLogger({
       }),
       // Separate debug log file when debug mode is enabled
       ...(config.logging.level === 'debug' ? [
-        new winston.transports.File({ 
+        new winston.transports.File({
           filename: 'logs/debug.log',
           maxsize: 10485760, // 10MB
           maxFiles: 3,
@@ -401,6 +496,141 @@ export const logRequestResponse = (req, res, options = {}) => {
   }
   
   logger.info('Request/Response details', logData)
+}
+
+// Enhanced error logging with detailed stack traces and line numbers
+export const logDetailedError = (error, context = {}) => {
+  // Capture call stack at the point of logging
+  const callStack = new Error().stack
+  
+  // Extract file and line information from the stack
+  const stackLines = callStack.split('\n')
+  const callerLine = stackLines[3] || 'Unknown location' // Skip this function and the logger call
+  
+  // Extract file, function, and line number information
+  const match = callerLine.match(/at\s+(.+?)\s+\((.+?):(\d+):(\d+)\)/)
+  let fileContext = {}
+  if (match) {
+    fileContext = {
+      function: match[1],
+      file: match[2],
+      line: match[3],
+      column: match[4]
+    }
+  } else {
+    // Fallback for different stack trace formats
+    const fallbackMatch = callerLine.match(/(.+?):(\d+):(\d+)/)
+    if (fallbackMatch) {
+      fileContext = {
+        function: 'Unknown',
+        file: fallbackMatch[1],
+        line: fallbackMatch[2],
+        column: fallbackMatch[3]
+      }
+    } else {
+      fileContext = {
+        function: 'Unknown',
+        file: callerLine.trim(),
+        line: 'Unknown',
+        column: 'Unknown'
+      }
+    }
+  }
+  
+  // Prepare response state information
+  const responseState = context.responseState || {}
+  const responseStateInfo = {
+    headersSent: responseState.headersSent || responseState.isHeadersSent,
+    ended: responseState.ended || responseState.isEnded,
+    writable: responseState.writable
+  }
+  
+  // Log to both the main logger and the detailed error logger
+  logger.error('Detailed error occurred', {
+    error: {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      statusCode: error.statusCode
+    },
+    requestId: context.requestId,
+    method: context.method,
+    url: context.url,
+    ip: context.ip,
+    responseState: responseStateInfo,
+    callStack: callStack,
+    context: fileContext,
+    ...context.additionalInfo
+  })
+  
+  // Also write to errors.log file directly for immediate access
+  const errorLogEntry = {
+    timestamp: new Date().toISOString(),
+    level: 'ERROR',
+    message: error.message,
+    error: {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      statusCode: error.statusCode
+    },
+    requestContext: {
+      requestId: context.requestId,
+      method: context.method,
+      url: context.url,
+      ip: context.ip
+    },
+    responseState: responseStateInfo,
+    executionContext: fileContext,
+    callStack: callStack,
+    additionalContext: context.additionalInfo || {}
+  }
+  
+  // Write to errors.log file
+  try {
+    const errorLogPath = path.join(process.cwd(), 'errors.log')
+    const logLine = JSON.stringify(errorLogEntry) + '\n'
+    fs.appendFileSync(errorLogPath, logLine)
+  } catch (fileError) {
+    console.error('Failed to write to errors.log:', fileError.message)
+  }
+}
+
+// Log response state changes for debugging
+export const logResponseState = (requestId, action, state = {}) => {
+  logger.debug(`Response state change: ${action}`, {
+    requestId,
+    action,
+    headersSent: state.headersSent,
+    responseEnded: state.responseEnded,
+    writable: state.writable,
+    timestamp: new Date().toISOString()
+  })
+}
+
+// Log header-related operations for debugging "Cannot set headers after sent" errors
+export const logHeaderOperation = (requestId, operation, success, error = null) => {
+  const level = success ? 'debug' : 'error'
+  logger[level](`Header operation: ${operation}`, {
+    requestId,
+    operation,
+    success,
+    error: error ? error.message : null,
+    timestamp: new Date().toISOString()
+  })
+  
+  // If this is an error, also log it with detailed error logging
+  if (!success && error) {
+    logDetailedError(error, {
+      requestId,
+      method: operation,
+      url: 'header_operation',
+      additionalInfo: {
+        operationType: operation,
+        headerError: true
+      }
+    })
+  }
 }
 
 export default logger

@@ -1,8 +1,23 @@
-import { logger } from '../services/logger.js'
+import { logger, logDetailedError, logResponseState, logHeaderOperation } from '../services/logger.js'
 
 export const errorHandler = (error, req, res, next) => {
   // If the response has already been sent, do not attempt to modify headers
   if (res.headersSent || res.writableEnded) {
+    logDetailedError(error, {
+      requestId: req.id,
+      method: req.method,
+      url: req.url,
+      responseState: {
+        headersSent: res.headersSent,
+        ended: res.writableEnded,
+        writable: res.writable
+      },
+      additionalInfo: {
+        errorType: 'headers_already_sent',
+        errorHandlerType: 'post_response_error'
+      }
+    })
+    
     logger.warn('Error handler invoked after response already sent', {
       requestId: req.id,
       error: error.message,
@@ -11,6 +26,25 @@ export const errorHandler = (error, req, res, next) => {
     })
     return
   }
+  
+  // Enhanced detailed error logging
+  logDetailedError(error, {
+    requestId: req.id,
+    method: req.method,
+    url: req.url,
+    ip: req.ip,
+    responseState: {
+      headersSent: res.headersSent,
+      ended: res.writableEnded,
+      writable: res.writable
+    },
+    additionalInfo: {
+      userAgent: req.get('User-Agent'),
+      errorType: 'request_error',
+      errorHandlerType: 'central_error_handler'
+    }
+  })
+  
   // Log the error
   logger.error('Request error', {
     message: error.message,
@@ -120,7 +154,58 @@ export const errorHandler = (error, req, res, next) => {
     errorResponse.request_id = req.id
   }
 
-  res.status(statusCode).json(errorResponse)
+  try {
+    logHeaderOperation(req.id, 'error_response_send', true)
+    res.status(statusCode).json(errorResponse)
+    
+    logResponseState(req.id, 'error_response_sent_successfully', {
+      headersSent: res.headersSent,
+      responseEnded: res.writableEnded,
+      writable: res.writable,
+      statusCode
+    })
+  } catch (sendError) {
+    logDetailedError(sendError, {
+      requestId: req.id,
+      method: req.method,
+      url: req.url,
+      responseState: {
+        headersSent: res.headersSent,
+        ended: res.writableEnded,
+        writable: res.writable
+      },
+      additionalInfo: {
+        originalError: error.message,
+        sendError: sendError.message,
+        statusCode,
+        errorType: 'error_response_send_failed'
+      }
+    })
+    
+    logHeaderOperation(req.id, 'error_response_send', false, sendError)
+    
+    // Try to send a minimal error response if the detailed one failed
+    try {
+      res.status(500).end('Internal Server Error')
+    } catch (fallbackError) {
+      logDetailedError(fallbackError, {
+        requestId: req.id,
+        method: req.method,
+        url: req.url,
+        responseState: {
+          headersSent: res.headersSent,
+          ended: res.writableEnded,
+          writable: res.writable
+        },
+        additionalInfo: {
+          originalError: error.message,
+          sendError: sendError.message,
+          fallbackError: fallbackError.message,
+          errorType: 'fallback_error_response_failed'
+        }
+      })
+    }
+  }
 }
 
 export class AppError extends Error {

@@ -1,4 +1,4 @@
-import { logger } from '../services/logger.js'
+import { logger, logDetailedError, logResponseState, logHeaderOperation } from '../services/logger.js'
 import { translateQolabaToOpenAI, extractToolCalls } from './translator.js'
 import { config } from '../config/index.js'
 import { createResponseState, withStreamingErrorBoundary, SafeSSEWriter } from './responseState.js'
@@ -34,6 +34,23 @@ class StreamingTimeoutManager {
         try {
           await callback()
         } catch (error) {
+          logDetailedError(error, {
+            requestId: this.requestId,
+            method: 'timeout_callback',
+            url: 'streaming_timeout_manager',
+            responseState: {
+              headersSent: false,
+              ended: this.isTerminated,
+              writable: false
+            },
+            additionalInfo: {
+              timeoutName: name,
+              isTerminated: this.isTerminated,
+              terminationReason: this.terminationReason,
+              activeTimeouts: Array.from(this.timeouts.keys())
+            }
+          })
+          
           logger.error('Timeout callback failed', {
             requestId: this.requestId,
             timeoutName: name,
@@ -148,6 +165,22 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
       
       logger.debug('Safe termination completed', { requestId, reason })
     } catch (error) {
+      logDetailedError(error, {
+        requestId,
+        method: 'safe_termination',
+        url: 'streaming_handler',
+        responseState: {
+          headersSent: responseState.isHeadersSent,
+          ended: responseState.isEnded,
+          writable: responseState.res.writable
+        },
+        additionalInfo: {
+          terminationReason: reason,
+          unifiedTimeoutManagerAvailable: !!unifiedTimeoutManager,
+          canOperate: unifiedTimeoutManager ? unifiedTimeoutManager.canOperate() : 'N/A'
+        }
+      })
+      
       logger.error('Safe termination failed', {
         requestId,
         reason,
@@ -212,6 +245,23 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
   
   // Handle response errors with better coordination and Promise safety
   const handleResponseError = async (error) => {
+    logDetailedError(error, {
+      requestId,
+      method: 'response_error_handler',
+      url: 'streaming_handler',
+      responseState: {
+        headersSent: responseState.isHeadersSent,
+        ended: responseState.isEnded,
+        writable: responseState.res.writable
+      },
+      additionalInfo: {
+        isClientDisconnected,
+        unifiedTimeoutManagerAvailable: !!unifiedTimeoutManager,
+        canOperate: unifiedTimeoutManager ? unifiedTimeoutManager.canOperate() : true,
+        errorCode: error.code
+      }
+    })
+    
     logger.error('Response error during streaming', {
       requestId,
       error: error.message,
@@ -219,7 +269,7 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
     })
     
     if (!isClientDisconnected) {
-      const canTerminate = unifiedTimeoutManager ? 
+      const canTerminate = unifiedTimeoutManager ?
         unifiedTimeoutManager.canOperate() : true
       
       if (canTerminate) {
@@ -229,6 +279,21 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
         try {
           await handleTermination('response_error')
         } catch (terminationError) {
+          logDetailedError(terminationError, {
+            requestId,
+            method: 'response_error_termination',
+            url: 'streaming_handler',
+            responseState: {
+              headersSent: responseState.isHeadersSent,
+              ended: responseState.isEnded,
+              writable: responseState.res.writable
+            },
+            additionalInfo: {
+              originalError: error.message,
+              terminationError: terminationError.message
+            }
+          })
+          
           logger.warn('Response error termination failed', {
             requestId,
             error: terminationError.message
@@ -253,6 +318,12 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
       return // Already handled
     }
     
+    logResponseState(requestId, 'client_disconnect_initiated', {
+      headersSent: responseState.isHeadersSent,
+      responseEnded: responseState.isEnded,
+      writable: responseState.res.writable
+    })
+    
     logger.info('Client disconnected during streaming', { requestId })
     isClientDisconnected = true
     abortController.abort()
@@ -261,6 +332,21 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
     try {
       await handleTermination('client_disconnect')
     } catch (error) {
+      logDetailedError(error, {
+        requestId,
+        method: 'client_disconnect_termination',
+        url: 'streaming_handler',
+        responseState: {
+          headersSent: responseState.isHeadersSent,
+          ended: responseState.isEnded,
+          writable: responseState.res.writable
+        },
+        additionalInfo: {
+          disconnectType: 'client_disconnect',
+          isClientDisconnected: true
+        }
+      })
+      
       logger.warn('Client disconnect termination failed', {
         requestId,
         error: error.message
@@ -405,6 +491,22 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
       }
 
     } catch (error) {
+      logDetailedError(error, {
+        requestId,
+        method: 'streaming_completion_termination',
+        url: 'streaming_handler',
+        responseState: {
+          headersSent: responseState.isHeadersSent,
+          ended: responseState.isEnded,
+          writable: responseState.res.writable
+        },
+        additionalInfo: {
+          responseLength: fullResponse.length,
+          model: qolabaPayload.model,
+          completionType: 'streaming_complete'
+        }
+      })
+      
       logger.warn('Streaming completion termination failed', {
         requestId,
         error: error.message
@@ -418,7 +520,26 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
 
       // Ensure ResponseManager is properly ended through its coordination even on error
       if (responseManager && !responseManager.hasEnded()) {
-        res.end()
+        try {
+          logHeaderOperation(requestId, 'res.end_call_completion_error', true)
+          res.end()
+        } catch (endError) {
+          logDetailedError(endError, {
+            requestId,
+            method: 'res.end_completion_error',
+            url: 'streaming_handler',
+            responseState: {
+              headersSent: responseState.isHeadersSent,
+              ended: responseState.isEnded,
+              writable: responseState.res.writable
+            },
+            additionalInfo: {
+              originalError: error.message,
+              endError: endError.message,
+              responseLength: fullResponse.length
+            }
+          })
+        }
       }
     }
 
@@ -456,6 +577,22 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
       }
 
     } catch (terminationError) {
+      logDetailedError(terminationError, {
+        requestId,
+        method: 'streaming_error_termination',
+        url: 'streaming_handler',
+        responseState: {
+          headersSent: responseState.isHeadersSent,
+          ended: responseState.isEnded,
+          writable: responseState.res.writable
+        },
+        additionalInfo: {
+          originalError: error.message,
+          terminationError: terminationError.message,
+          errorType: 'streaming_error_boundary'
+        }
+      })
+      
       logger.warn('Error termination failed', {
         requestId,
         error: terminationError.message
@@ -469,7 +606,26 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
 
       // Ensure ResponseManager is properly ended through its coordination even on termination error
       if (responseManager && !responseManager.hasEnded()) {
-        res.end()
+        try {
+          logHeaderOperation(requestId, 'res.end_call_termination_error', true)
+          res.end()
+        } catch (endError) {
+          logDetailedError(endError, {
+            requestId,
+            method: 'res.end_termination_error',
+            url: 'streaming_handler',
+            responseState: {
+              headersSent: responseState.isHeadersSent,
+              ended: responseState.isEnded,
+              writable: responseState.res.writable
+            },
+            additionalInfo: {
+              originalError: error.message,
+              terminationError: terminationError.message,
+              endError: endError.message
+            }
+          })
+        }
       }
     }
 
@@ -652,6 +808,22 @@ export function sendTimeoutErrorStreaming(responseState, model, message = 'Reque
       return false
     }
   } catch (error) {
+    logDetailedError(error, {
+      requestId: responseState.requestId,
+      method: 'send_timeout_error_streaming',
+      url: 'streaming_timeout_handler',
+      responseState: {
+        headersSent: responseState.isHeadersSent,
+        ended: responseState.isEnded,
+        writable: responseState.res.writable
+      },
+      additionalInfo: {
+        timeoutMessage: message,
+        model: model,
+        errorType: 'timeout_error_streaming'
+      }
+    })
+    
     logger.error('Error sending timeout error streaming chunk', {
       requestId: responseState.requestId,
       error: error.message
@@ -680,6 +852,21 @@ export function sendTimeoutErrorHttp(res, requestId, message = 'Request timeout'
     })
     return true
   } catch (error) {
+    logDetailedError(error, {
+      requestId,
+      method: 'send_timeout_error_http',
+      url: 'streaming_timeout_handler',
+      responseState: {
+        headersSent: res.headersSent,
+        ended: res.writableEnded,
+        writable: res.writable
+      },
+      additionalInfo: {
+        timeoutMessage: message,
+        errorType: 'timeout_error_http'
+      }
+    })
+    
     logger.error('Error sending timeout error HTTP response', {
       requestId,
       error: error.message
