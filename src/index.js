@@ -187,7 +187,9 @@ process.on('warning', (warning) => {
   })
 })
 
-// Start the server
-startServer()
+// Start the server only if not in test environment
+if (config.server.nodeEnv !== 'test') {
+  startServer()
+}
 
 export default app

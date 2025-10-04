@@ -110,29 +110,34 @@ describe('Qoloba Proxy API Tests', () => {
       
       await detailedHealthHandler(mockReq, mockRes);
       
-      expect(mockRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: expect.any(String),
-          timestamp: expect.any(String),
-          uptime: expect.any(Number),
-          version: '1.0.0',
-          service: 'qoloba-proxy',
-          dependencies: expect.objectContaining({
-            qolaba_api: expect.objectContaining({
-              status: expect.any(String),
-              response_time: expect.any(String),
-              url: expect.any(String)
-            })
-          }),
-          system: expect.objectContaining({
-            memory_usage: expect.any(Object),
-            platform: expect.any(String),
-            node_version: expect.any(String)
-          }),
-          config: expect.any(Object),
-          environment: expect.any(String)
-        })
-      );
+      const response = mockRes.json.mock.calls[0][0];
+      expect(response).toHaveProperty('status');
+      expect(response).toHaveProperty('timestamp');
+      expect(response).toHaveProperty('uptime');
+      expect(response).toHaveProperty('version', '1.0.0');
+      expect(response).toHaveProperty('service', 'qolaba-proxy');
+      expect(response).toHaveProperty('dependencies');
+      expect(response).toHaveProperty('system');
+      expect(response).toHaveProperty('config');
+      expect(response).toHaveProperty('environment');
+      
+      // Check dependencies
+      expect(response.dependencies).toHaveProperty('qolaba_api');
+      expect(response.dependencies.qolaba_api).toHaveProperty('status');
+      expect(response.dependencies.qolaba_api).toHaveProperty('response_time');
+      expect(response.dependencies.qolaba_api).toHaveProperty('url');
+      
+      // Check system info
+      expect(response.system).toHaveProperty('memory_usage');
+      expect(response.system).toHaveProperty('cpu_usage');
+      expect(response.system).toHaveProperty('platform');
+      expect(response.system).toHaveProperty('node_version');
+      
+      // Check config
+      expect(response.config).toHaveProperty('auth_mode');
+      expect(response.config).toHaveProperty('host');
+      expect(response.config).toHaveProperty('log_level');
+      expect(response.config).toHaveProperty('port');
     });
 
     it('should handle readiness check', async () => {

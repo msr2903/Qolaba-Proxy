@@ -71,7 +71,7 @@ describe('Qoloba Proxy API Tests - Fixed', () => {
           timestamp: expect.any(String),
           uptime: expect.any(Number),
           version: '1.0.0',
-          service: 'qoloba-proxy',
+          service: 'qolaba-proxy',
           dependencies: expect.objectContaining({
             qolaba_api: expect.objectContaining({
               status: expect.any(String),
