@@ -320,7 +320,8 @@ export class ManualTestScript {
           ...options
         }
         
-        const req = require('https' if url.startsWith('https:') else 'http').request(url, requestOptions, (res) => {
+        const httpModule = url.startsWith('https:') ? require('https') : require('http')
+        const req = httpModule.request(url, requestOptions, (res) => {
           response = res
           
           if (res.statusCode !== 200) {
@@ -364,7 +365,8 @@ export class ManualTestScript {
     
     return new Promise((resolve, reject) => {
       try {
-        const req = require('https' if url.startsWith('https:') else 'http').request(url, {
+        const httpModule = url.startsWith('https:') ? require('https') : require('http')
+        const req = httpModule.request(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -409,7 +411,8 @@ export class ManualTestScript {
     
     return new Promise((resolve, reject) => {
       try {
-        const req = require('https' if url.startsWith('https:') else 'http').request(url, (res) => {
+        const httpModule = url.startsWith('https:') ? require('https') : require('http')
+        const req = httpModule.request(url, (res) => {
           let data = ''
           
           res.on('data', (chunk) => {

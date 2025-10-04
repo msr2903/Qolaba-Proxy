@@ -5,10 +5,7 @@
  * This test validates that the server starts and basic functionality works
  */
 
-import { createRequire } from 'module'
-const require = createRequire(import.meta.url)
-
-const http = require('http')
+import http from 'http'
 
 // Simple test to validate server starts
 async function testServerStart() {

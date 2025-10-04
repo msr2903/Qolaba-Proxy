@@ -75,11 +75,53 @@ async function testStreamingFix() {
       if (fullResponse.includes('data: ') && fullResponse.includes('chat.completion.chunk')) {
         console.log('✅ Stream format is correct (SSE with OpenAI chunks)')
       } else {
-        console.log('⚠️  Stream format may not be as
-      // Verify the stream contains expected SSE format
-      if (fullResponse.includes('data: ') && fullResponse.includes('chat.completion.chunk')) {
-        console.log('✅ Stream format is correct (SSE with OpenAI chunks)')
+        console.log('⚠️  Stream format may not be as expected')
+      }
+      
+      // Check for proper streaming termination
+      if (fullResponse.includes('data: [DONE]')) {
+        console.log('✅ Stream properly terminated with [DONE] marker')
       } else {
-        console.log('⚠️  Stream format may not be as
-expected')\n      }\n\n
-      // Check for proper
+        console.log('⚠️  Stream may not be properly terminated')
+      }
+      
+      return true
+    } catch (error) {
+      console.error('❌ Error while reading stream:', error.message)
+      return false
+    }
+  } catch (error) {
+    console.error('❌ Error with streaming request:', error.message)
+    return false
+  }
+}
+
+// Main execution
+async function main() {
+  console.log('🚀 Starting streaming fix test...\n')
+  
+  try {
+    const result = await testStreamingFix()
+    
+    if (result) {
+      console.log('\n🎉 Streaming fix test PASSED!')
+      console.log('✅ No header errors detected')
+      console.log('✅ Stream completed properly')
+      process.exit(0)
+    } else {
+      console.log('\n💥 Streaming fix test FAILED!')
+      console.log('❌ Issues detected with streaming')
+      process.exit(1)
+    }
+  } catch (error) {
+    console.error('\n💥 Test execution failed:', error.message)
+    process.exit(1)
+  }
+}
+
+// Run tests if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main()
+}
+
+export { testStreamingFix, main }

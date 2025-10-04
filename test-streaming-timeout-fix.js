@@ -3,8 +3,8 @@
  * This simulates the scenario described in the original issue
  */
 
-const { spawn } = require('child_process');
-const http = require('http');
+import { spawn } from 'child_process';
+import http from 'http';
 
 // Test configuration
 const TEST_CONFIG = {
@@ -192,11 +192,11 @@ async function runTests() {
 }
 
 // Run tests if this file is executed directly
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   runTests();
 }
 
-module.exports = {
+export {
   testStreamingTimeout,
   testLogRateLimiting,
   runTests
