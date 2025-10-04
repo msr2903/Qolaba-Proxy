@@ -2,7 +2,7 @@
  * Test script to verify timeout error handling in streaming responses
  */
 
-import { createTimeoutErrorChunk, createTimeoutErrorResponse, handleTimeoutError } from './src/utils/streaming.js'
+import { createTimeoutErrorChunk, createTimeoutErrorResponse, handleTimeoutError } from '../src/utils/streaming.js'
 
 // Mock logger and response state for testing
 const mockLogger = {

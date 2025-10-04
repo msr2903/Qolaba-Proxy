@@ -360,7 +360,7 @@ export const logger = winston.createLogger({
       }),
       // Enhanced error log with detailed stack traces
       new winston.transports.File({
-        filename: 'errors.log',
+        filename: 'logs/errors.log',
         level: 'error',
         maxsize: 10485760, // 10MB
         maxFiles: 10,
@@ -591,7 +591,7 @@ export const logDetailedError = (error, context = {}) => {
   
   // Write to errors.log file
   try {
-    const errorLogPath = path.join(process.cwd(), 'errors.log')
+    const errorLogPath = path.join(process.cwd(), 'logs/errors.log')
     const logLine = JSON.stringify(errorLogEntry) + '\n'
     fs.appendFileSync(errorLogPath, logLine)
   } catch (fileError) {

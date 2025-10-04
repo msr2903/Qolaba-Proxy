@@ -3,8 +3,8 @@
  * This test simulates the race condition scenario to ensure headers are not sent after streaming completion
  */
 
-import { createResponseState } from './src/utils/responseState.js'
-import { logger } from './src/services/logger.js'
+import { createResponseState } from '../src/utils/responseState.js'
+import { logger } from '../src/services/logger.js'
 
 // Mock response object
 const mockRes = {

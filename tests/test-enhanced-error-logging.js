@@ -1,5 +1,5 @@
-import { logDetailedError, logResponseState, logHeaderOperation } from './src/services/logger.js'
-import { createResponseManager } from './src/utils/responseManager.js'
+import { logDetailedError, logResponseState, logHeaderOperation } from '../src/services/logger.js'
+import { createResponseManager } from '../src/utils/responseManager.js'
 
 // Test function to validate the enhanced error logging system
 async function testEnhancedErrorLogging() {

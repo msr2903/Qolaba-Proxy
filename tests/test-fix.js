@@ -1,4 +1,4 @@
-import { safeStringify } from './src/utils/serialization.js';
+import { safeStringify } from '../src/utils/serialization.js';
 
 console.log('🧪 Testing circular reference fix...\n');
 
