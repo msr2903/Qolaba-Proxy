@@ -103,7 +103,7 @@ function validateChatRequest(body) {
       return { valid: false, error: `Message at index ${i} is missing required role or content field` }
     }
     
-    if (!['system', 'user', 'assistant', 'tool'].includes(message.role)) {
+    if (!['system', 'user', 'assistant', 'tool', 'developer', 'function'].includes(message.role)) {
       return { valid: false, error: `Invalid role "${message.role}" in message at index ${i}` }
     }
   }
