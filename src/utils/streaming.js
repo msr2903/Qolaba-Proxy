@@ -128,8 +128,19 @@ class SafeSSEWriter {
     try {
       let sseData = `data: ${JSON.stringify(data)}\n\n`
       
+      // ENHANCEMENT: Add proper event types for SillyTavern compatibility
       if (eventType) {
         sseData = `event: ${eventType}\n${sseData}`
+      }
+      
+      // ENHANCEMENT: Add ID and retry timing for better SSE compliance
+      if (data.id) {
+        sseData = `id: ${data.id}\n${sseData}`
+      }
+      
+      // ENHANCEMENT: Ensure proper SSE format with newlines
+      if (!sseData.endsWith('\n\n')) {
+        sseData += '\n\n'
       }
 
       return this.responseManager.safeWrite(sseData)
@@ -531,13 +542,16 @@ export async function handleStreamingResponse(responseManager, res, req, qolabaC
   })
   
   return withStreamingErrorBoundary(async (responseState) => {
-    // Set SSE headers safely
+    // Set SSE headers safely with enhanced SillyTavern compatibility
     const headersSet = responseState.safeWriteHeaders(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Connection': 'keep-alive',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
+      'Access-Control-Allow-Headers': 'Cache-Control, Content-Type, Authorization',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'X-Accel-Buffering': 'no', // Prevent nginx buffering
+      'X-Content-Type-Options': 'nosniff'
     })
 
     if (!headersSet) {

@@ -100,7 +100,7 @@ export class QolabaApiClient {
           'Accept': 'text/event-stream',
           'Cache-Control': 'no-cache'
         },
-        timeout: 90000 // CRITICAL FIX: Extended to 90 seconds to handle provider latency
+        timeout: 120000 // CRITICAL FIX: Aligned with unified timeout manager (120 seconds)
       })
 
       let buffer = ''
@@ -125,11 +125,41 @@ export class QolabaApiClient {
             buffer = lines.pop() || '' // Keep incomplete line in buffer
             
             for (const line of lines) {
-              if (line.trim() === '') continue
+              const trimmedLine = line.trim()
+              if (trimmedLine === '') continue
+              
+              // Skip SSE comments and non-data lines
+              if (trimmedLine.startsWith(':')) continue
               
               try {
+                // Handle SSE format: "data: {json}"
+                let jsonLine = trimmedLine
+                if (trimmedLine.startsWith('data: ')) {
+                  jsonLine = trimmedLine.substring(6) // Remove "data: " prefix
+                }
+                
+                // Skip [DONE] marker
+                if (jsonLine === '[DONE]') {
+                  isStreamEnded = true
+                  const responseTime = Date.now() - startTime
+                  logQolabaRequest('/streamChat', 'POST', payload, responseTime, 200)
+                  
+                  // CRITICAL FIX: Ensure proper stream cleanup on completion
+                  cleanupStream(response, 'completion')
+                  
+                  resolve({
+                    output: totalOutput,
+                    usage: {
+                      promptTokens: 0,
+                      completionTokens: totalOutput.length / 4, // Rough estimate
+                      totalTokens: totalOutput.length / 4
+                    }
+                  })
+                  return
+                }
+                
                 // Parse JSON response from Qolaba
-                const data = JSON.parse(line.trim())
+                const data = JSON.parse(jsonLine)
                 
                 if (data.output !== null && data.output !== undefined) {
                   totalOutput += data.output
@@ -169,7 +199,7 @@ export class QolabaApiClient {
                 }
               } catch (parseError) {
                 logger.warn('Failed to parse streaming response', {
-                  line: line.substring(0, 100),
+                  line: trimmedLine.substring(0, 100),
                   error: parseError.message
                 })
               }
@@ -262,7 +292,7 @@ export class QolabaApiClient {
             
             // CRITICAL FIX: Coordinate timeouts with axios timeout to prevent race conditions
             // Allow more time for provider latency but don't wait indefinitely
-            if (timeSinceLastChunk > 75000) { // 75 seconds of inactivity (less than 90s axios timeout)
+            if (timeSinceLastChunk > 110000) { // 110 seconds of inactivity (less than 120s timeout)
               isStreamEnded = true
               logger.warn('Stream inactive for too long, cleaning up', {
                 requestId: 'unknown',
@@ -276,7 +306,7 @@ export class QolabaApiClient {
               return
             }
             
-            if (totalElapsed > 80000) { // 80 seconds absolute maximum (less than 90s axios timeout)
+            if (totalElapsed > 115000) { // 115 seconds absolute maximum (less than 120s timeout)
               isStreamEnded = true
               logger.warn('Stream absolute timeout reached, cleaning up', {
                 requestId: 'unknown',
@@ -437,6 +467,54 @@ export class QolabaApiClient {
       logger.error('Failed to get usage info:', error)
       throw error
     }
+  }
+
+  /**
+   * Analyze request complexity to determine appropriate timeout
+   */
+  analyzeRequestComplexity(payload) {
+    const factors = {
+      messageCount: payload.messages?.length || 0,
+      systemMessageCount: payload.messages?.filter(m => m.role === 'system').length || 0,
+      totalCharacters: JSON.stringify(payload.messages || []).length,
+      maxTokens: payload.max_tokens || 100,
+      temperature: payload.temperature || 0.7
+    }
+    
+    // Calculate complexity score
+    let complexityScore = 0
+    
+    // Base score for message count
+    complexityScore += factors.messageCount * 10
+    
+    // Extra penalty for system messages (they increase processing time)
+    complexityScore += factors.systemMessageCount * 20
+    
+    // Penalty for large content
+    complexityScore += Math.min(factors.totalCharacters / 100, 50)
+    
+    // Penalty for high max_tokens
+    complexityScore += Math.min(factors.maxTokens / 10, 30)
+    
+    // Determine complexity level
+    if (complexityScore <= 30) return 'simple'
+    if (complexityScore <= 60) return 'moderate'
+    if (complexityScore <= 100) return 'complex'
+    return 'very_complex'
+  }
+  
+  /**
+   * Calculate adaptive timeout based on request complexity
+   */
+  calculateAdaptiveTimeout(complexity) {
+    const timeouts = {
+      simple: 45000,      // 45 seconds for simple requests
+      moderate: 90000,    // 90 seconds for moderate requests  
+      complex: 150000,    // 150 seconds for complex requests
+      very_complex: 180000 // 180 seconds for very complex requests
+    }
+    
+    return timeouts[complexity] || timeouts.moderate
   }
 
   /**
