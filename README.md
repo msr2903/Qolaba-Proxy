@@ -4,6 +4,18 @@
 
 A powerful Node.js proxy server that provides OpenAI-compatible API endpoints while routing requests to the Qolaba API. This enables seamless integration with AI tools like Kilo Code, Roo Code, Cline, and any other OpenAI-compatible applications.
 
+## [Original Message on Discord:](https://discord.com/channels/1225812812643958866/1377469424130326568/1424067221600210985)
+
+So I have some good news and some bad news.
+
+**Good News:** I made an OpenAI proxy for your API so you can use it in other tools like Kilo Code, Roo Code, Cline, or anything else that supports OpenAI compatible endpoints.
+
+**Bad News:** I have no plans on supporting it in the future as I am planning on requesting a refund on my LTDs since it's about to expire and I have trouble finding value in this vs alternatives with native OpenAI or Anthropic endpoint support.
+
+**Why:** Really, the models available and the price.  There are disparities between the cost of credits on the main platform and the API, they cost 2.5x less on API site. But on the API site, credit usage are a min of 1 and go up as integers.  On the web portal, many models can have fractional credit usage.  Other providers are definitely cheaper and while this is a LTD and will keep replenishing and I like that credits stack between periods, I just don't see me using it.  This price disparity is fine for API purchasers to justify the different credit costs and lack of margins, but with the LTD, it makes the credit usage much much higher than on the site.  Then there are lack of things like Veo3 in API.
+
+**Can I get a copy:** Yeah, I will probably put it on GitHub with a permissible license for others to use or fork.  Maybe it will help bring popularity to Qolaba or give them a starting point for more functions.  Keep a look out for updates or DM me if interested in taking over.  Maybe someone could share API keys/accounts if it needs updates & there is no one to maintain. But just doing basic test calls during development, I used over 900 credits in a night.  Honestly, I wanted to create an interface for this when I first got the LTD, but life got in the way & my big push was I was approaching my refund day.
+
 ## 🚀 Features
 
 - **OpenAI API Compatibility**: Drop-in replacement for OpenAI endpoints (`/v1/chat/completions`, `/v1/models`)
