@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  qoloba-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - QOLABA_BASE_URL=https://qolaba-server-b2b.up.railway.app/api/v1/studio
+      - API_KEY_MODE=passthrough
+      - LOG_LEVEL=info
+      - ENABLE_VERBOSE_LOGGING=false
+      - REQUEST_TIMEOUT=300000
+      - MAX_RESPONSE_SIZE=10485760
+      - CONCURRENT_REQUESTS_LIMIT=100
+      - ENABLE_METRICS=true
+      - CORS_ORIGIN=*
+      - CORS_CREDENTIALS=false
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Development service with hot reloading
+  qoloba-proxy-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+      - "9229:9229"  # Debug port
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - HOST=0.0.0.0
+      - QOLABA_BASE_URL=https://qolaba-server-b2b.up.railway.app/api/v1/studio
+      - API_KEY_MODE=passthrough
+      - LOG_LEVEL=debug
+      - ENABLE_VERBOSE_LOGGING=true
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./logs:/app/logs
+    restart: unless-stopped
+    profiles:
+      - dev

@@ -1,0 +1,23 @@
+{
+  "messages": [
+    {
+      "role": "system",
+      "content": "Write Assistant's next reply in a fictional chat between Assistant and User."
+    },
+    {
+      "role": "system", 
+      "content": "[Start a new Chat]"
+    },
+    {
+      "role": "user",
+      "content": "hi"
+    }
+  ],
+  "model": "gpt-4.1-mini-2025-04-14",
+  "temperature": 1,
+  "max_tokens": 300,
+  "stream": true,
+  "presence_penalty": 0,
+  "frequency_penalty": 0,
+  "top_p": 1
+}
