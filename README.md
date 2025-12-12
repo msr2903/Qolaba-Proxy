@@ -40,7 +40,7 @@ So I have some good news and some bad news.
 
 ```bash
 # Clone the repository
-git clone https://github.com/AppliedEllipsis/Qolaba-Proxy.git
+git clone https://github.com/msr2903/Qolaba-Proxy.git
 cd Qolaba-Proxy
 
 # Install dependencies
